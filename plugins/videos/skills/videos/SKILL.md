@@ -19,6 +19,7 @@ argument-hint: "[video name or slug]"
 | Stage | Skill | Covers |
 |---|---|---|
 | brief | `/videos:new` | create the record, kind, campaign / content-hub link, sources, style files |
+| generate | your generation pipeline | AI video (kind `generative`): scenes → storyboard → references → voices → keyframes → animatic → shot clips; no skill in this plugin yet, paid models need a go-ahead |
 | ingest | `/videos:ingest` | probe sources, sync offsets, camera angles, NLE import, multicam |
 | transcribe | `/videos:transcribe` | word-level transcript with fillers kept, caption text |
 | rough | `/videos:rough` | text anchors → cut list → timeline + markers |
@@ -38,6 +39,7 @@ Companion plugins from the same marketplace: `audio-cleanup`, `vertical-clips`, 
 - Taste lives in the project: a stage that cuts or styles reads the record's `style:` files (edit style, caption look, brand). None → ask once, write the answer into a style file and add it to `style:`.
 - Preview before full builds: one video, clip or look approved before a batch. Gates = status `review` until the human says go.
 - Paid calls (speech-to-text APIs, generation, dubbing) need a go-ahead per job; cache every result next to the job and never request it twice.
+- Local GPU generation (video or image models running on your own card) costs nothing per call but holds the GPU and a lot of RAM: run only what was asked and say the expected minutes first.
 - Never cut voice the transcript lacks: words a speech-to-text model missed are listed for the human, not cut.
 - Grade per set: a look never crosses shoots or sets (lighting differs).
 - One render chain at a time; check free RAM first (< 4 GB → wait). Background jobs longer than ~10 min get a periodic check that they are still moving.

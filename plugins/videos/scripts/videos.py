@@ -33,16 +33,16 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
-STAGES = ["brief", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "clips", "qc", "publish"]
+STAGES = ["brief", "generate", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "clips", "qc", "publish"]
 KINDS = {
     "talking-head": ["brief", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "qc", "publish"],
     "clip-batch": ["brief", "transcribe", "rough", "audio", "grade", "clips", "qc", "publish"],
     "clip": ["brief", "transcribe", "rough", "audio", "grade", "formats", "qc", "publish"],
     "motion": ["brief", "audio", "formats", "qc", "publish"],
-    "generative": ["brief", "audio", "formats", "qc", "publish"],
+    "generative": ["brief", "generate", "audio", "formats", "qc", "publish"],
 }
 HEAD = ["title", "slug", "workspace", "kind", "campaign", "content", "talent", "style", "code", "media", "resolve"]
-ABBR = {"brief": "brf", "ingest": "ing", "transcribe": "stt", "rough": "rgh", "tighten": "tgt", "audio": "aud", "grade": "grd",
+ABBR = {"brief": "brf", "generate": "gen", "ingest": "ing", "transcribe": "stt", "rough": "rgh", "tighten": "tgt", "audio": "aud", "grade": "grd",
         "master": "mst", "formats": "fmt", "clips": "clp", "qc": "qc", "publish": "pub"}
 MARK = {"done": "✓", "skip": "·", "todo": "-", "doing": "▶", "review": "R", "blocked": "✕"}
 STATUS = ("todo", "doing", "review", "done", "skip", "blocked")

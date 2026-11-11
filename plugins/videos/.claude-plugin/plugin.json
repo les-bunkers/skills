@@ -1,6 +1,6 @@
 {
   "name": "videos",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Video pipeline for any project: a board of every video in progress, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, master, formats, clips, qc, publish) driven by a plain-text record per video.",
   "author": {
     "name": "Les Bunkers",

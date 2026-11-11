@@ -36,7 +36,7 @@ code: footage/2026-03-02/rough-cut
 media: /mnt/media/acme/videos/launch-03-studio-tour
 resolve: Acme project / Studio tour — tight v1
 brief: done 2026-03-02        # one key per stage: status word + date or note
-ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  master: …  formats: …  clips: …  qc: …  publish: …
+generate: …  ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  master: …  formats: …  clips: …  qc: …  publish: …
 next: editor reviews the tighten markers (pink first)
 updated: 2026-03-04
 ```
@@ -64,7 +64,7 @@ The stages a kind doesn't use start as `skip`.
 | clip-batch | brief transcribe rough audio grade clips qc publish (one record for the batch; every published clip gets its own `artifacts/videos/<slug>/`) |
 | clip | brief transcribe rough audio grade formats qc publish (one vertical made by hand) |
 | motion | brief audio formats qc publish (graphics-led: offer video, bumper, explainer) |
-| generative | brief audio formats qc publish (AI video; generation happens inside formats and is paid → ask first) |
+| generative | brief generate audio formats qc publish (AI video: scene options, storyboard, character/set references, voices, keyframes, animatic, shot clips in `generate`; paid models → ask first) |
 
 ## Campaign and content hub
 
