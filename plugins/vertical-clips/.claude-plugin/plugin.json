@@ -1,0 +1,21 @@
+{
+  "name": "vertical-clips",
+  "version": "0.1.0",
+  "description": "9:16 clip factory for podcasts and long talking-head videos: sticky face crops, stacked two-person layout, three-transcript caption fixing, -14 LUFS master, word-timed captions and hook in HyperFrames, QC and a review page.",
+  "author": {
+    "name": "Les Bunkers",
+    "url": "https://github.com/les-bunkers"
+  },
+  "homepage": "https://github.com/les-bunkers/skills",
+  "repository": "https://github.com/les-bunkers/skills",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "vertical",
+    "reels",
+    "shorts",
+    "captions",
+    "hyperframes",
+    "podcast"
+  ]
+}

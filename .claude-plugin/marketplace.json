@@ -1,0 +1,34 @@
+{
+  "name": "les-bunkers",
+  "description": "Video production skills from Les Bunkers, a video and podcast studio: a full talking-head edit pipeline, speech cleanup and mastering, vertical clips, and breath / filler detection.",
+  "owner": {
+    "name": "Les Bunkers",
+    "url": "https://github.com/les-bunkers"
+  },
+  "plugins": [
+    {
+      "name": "videos",
+      "source": "./plugins/videos",
+      "description": "Video pipeline for any project: /videos board, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, master, formats, clips, qc, publish) with a plain-text record per video.",
+      "category": "productivity"
+    },
+    {
+      "name": "audio-cleanup",
+      "source": "./plugins/audio-cleanup",
+      "description": "Speech cleanup for a DaVinci Resolve edit: reads what the timeline plays, splits two speakers, enhances speech, masters to -14 LUFS, places the tracks back in Resolve and builds an A/B listening page.",
+      "category": "productivity"
+    },
+    {
+      "name": "vertical-clips",
+      "source": "./plugins/vertical-clips",
+      "description": "9:16 clip factory for podcasts and long talking-head videos: sticky face crops, stacked two-person layout, three-transcript caption fixing, -14 LUFS master, word-timed captions and hook in HyperFrames, QC and a review page.",
+      "category": "productivity"
+    },
+    {
+      "name": "agent-ears",
+      "source": "./plugins/agent-ears",
+      "description": "Lets an agent hear breaths and fillers (« euh », \"um\") in speech so an edit can cut them, plus a blind labelling page and scoring kit to test any detector against your own ears.",
+      "category": "productivity"
+    }
+  ]
+}

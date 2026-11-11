@@ -1,0 +1,20 @@
+{
+  "name": "videos",
+  "version": "0.1.0",
+  "description": "Video pipeline for any project: a board of every video in progress, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, master, formats, clips, qc, publish) driven by a plain-text record per video.",
+  "author": {
+    "name": "Les Bunkers",
+    "url": "https://github.com/les-bunkers"
+  },
+  "homepage": "https://github.com/les-bunkers/skills",
+  "repository": "https://github.com/les-bunkers/skills",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "editing",
+    "davinci-resolve",
+    "pipeline",
+    "talking-head",
+    "transcription"
+  ]
+}

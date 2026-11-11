@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Audio Cleanup A/B</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one 960px working column, sticky pipeline bar; per spot = transport + numbered steps, two speaker lanes per step */
+:root {
+  --bg: #eef1f5; --surface: #ffffff; --ink: #0f1c33; --muted: #4b5876; --line: #d4dae4;
+  --navy: #1b2f5e; --navy-hover: #26407a; --on-navy: #ffffff; --tint: #e2e8f2;
+  --wave: #8d9bb8; --wave-played: #1b2f5e; --drop: rgba(234, 108, 32, .2); --drop-edge: #c4561a;
+  --mark-bg: #fde3d0; --mark-ink: #7a2e06; --focus: #3d6bd8; --curve: #1f8a5b;
+  --sans: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1220; --surface: #121b2e; --ink: #e5eaf3; --muted: #9eabc4; --line: #24304a;
+    --navy: #a9c1ff; --navy-hover: #c2d3ff; --on-navy: #0b1530; --tint: #1b2741;
+    --wave: #4d5c7c; --wave-played: #a9c1ff; --drop: rgba(255, 140, 70, .18); --drop-edge: #ff9a5c;
+    --mark-bg: #4a2410; --mark-ink: #ffd2b5; --focus: #8fb0ff; --curve: #5fd3a0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1220; --surface: #121b2e; --ink: #e5eaf3; --muted: #9eabc4; --line: #24304a;
+  --navy: #a9c1ff; --navy-hover: #c2d3ff; --on-navy: #0b1530; --tint: #1b2741;
+  --wave: #4d5c7c; --wave-played: #a9c1ff; --drop: rgba(255, 140, 70, .18); --drop-edge: #ff9a5c;
+  --mark-bg: #4a2410; --mark-ink: #ffd2b5; --focus: #8fb0ff; --curve: #5fd3a0; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+::selection { background: var(--navy); color: var(--on-navy); }
+[hidden] { display: none !important; }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.col { max-width: 960px; margin: 0 auto; }
+header.intro { padding-block: 40px 24px; }
+.intro .col { display: grid; gap: 12px; }
+h1 { font-size: 2rem; line-height: 1.15; font-weight: 700; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h2 { font-size: .8rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin: 0; color: var(--muted); }
+p { margin: 0; max-width: 72ch; }
+.muted { color: var(--muted); }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  border-bottom: 1px solid var(--line); padding-block: 12px; }
+.bar .col { display: grid; gap: 8px; }
+.bar-row { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tab { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px;
+  font: inherit; font-size: .9rem; font-weight: 500; color: var(--ink); cursor: pointer; display: inline-flex; gap: 8px; align-items: center;
+  transition: background-color .24s ease-out, border-color .24s ease-out, color .24s ease-out, scale .24s ease-out; }
+.tab:hover { background: var(--tint); border-color: var(--wave); transition-duration: .16s; }
+.tab:active { scale: .96; transition-duration: .08s; }
+.tab[aria-selected="true"] { background: var(--navy); border-color: var(--navy); color: var(--on-navy); }
+.tab .n { font-family: var(--mono); font-size: .72rem; opacity: .7; }
+.pdesc { color: var(--muted); font-size: .88rem; }
+.keys { color: var(--muted); font-size: .82rem; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+kbd { font-family: var(--mono); font-size: .76rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px;
+  padding: 0 6px; background: var(--surface); color: var(--ink); }
+.toggle { display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line); background: var(--surface);
+  border-radius: 999px; padding: 5px 14px 5px 6px; font: inherit; font-size: .88rem; color: var(--ink); cursor: pointer;
+  transition: background-color .24s ease-out, border-color .24s ease-out, scale .24s ease-out; }
+.toggle:hover { background: var(--tint); border-color: var(--wave); transition-duration: .16s; }
+.toggle:active { scale: .96; transition-duration: .08s; }
+.toggle .knob { width: 30px; height: 18px; border-radius: 999px; background: var(--line); position: relative; transition: background-color .2s ease-out; }
+.toggle .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--surface); transition: translate .2s ease-out; }
+.toggle[aria-pressed="true"] .knob { background: var(--navy); }
+.toggle[aria-pressed="true"] .knob::after { translate: 12px 0; }
+main { padding-block: 28px 80px; }
+main .col { display: grid; gap: 44px; }
+.pod-head { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.pod-head span { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.spot { display: grid; gap: 14px; padding-block: 24px; border-bottom: 1px solid var(--line); scroll-margin-top: 140px; }
+.spot-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.tc { font-family: var(--mono); font-weight: 500; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.meta { color: var(--muted); font-size: .85rem; }
+.badge { font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; border-radius: 999px;
+  padding: 1px 8px; background: var(--mark-bg); color: var(--mark-ink); align-self: center; }
+.player { display: flex; align-items: center; gap: 12px; }
+.play { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--navy); color: var(--on-navy);
+  display: grid; place-items: center; cursor: pointer; transition: background-color .24s ease-out, scale .24s ease-out; }
+.play:hover { background: var(--navy-hover); transition-duration: .16s; }
+.play:active { scale: .94; transition-duration: .08s; }
+.play svg { width: 20px; height: 20px; fill: currentColor; }
+.play .i-pause, .play[aria-pressed="true"] .i-play { display: none; }
+.play[aria-pressed="true"] .i-pause { display: block; }
+.play[data-busy="true"] { opacity: .6; cursor: progress; }
+.main-wave { flex: 1; min-width: 0; height: 76px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line);
+  cursor: pointer; overflow: hidden; transition: background-color .24s ease-out, border-color .24s ease-out; }
+.main-wave:hover { border-color: var(--wave); transition-duration: .16s; }
+.main-wave:active { background: var(--tint); transition-duration: .08s; }
+canvas { display: block; width: 100%; height: 100%; }
+.time { font-family: var(--mono); font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 7.5ch; text-align: right; }
+.now { font-size: .88rem; color: var(--muted); }
+.now b { color: var(--ink); font-weight: 600; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.step { display: grid; grid-template-columns: 13rem 1fr; gap: 12px; align-items: stretch; }
+.step-label { display: grid; grid-template-columns: 1.6rem 1fr; gap: 0 8px; align-content: center; min-width: 0; }
+.step-label .sn { grid-row: span 2; font-family: var(--mono); font-size: .8rem; color: var(--muted); border: 1px solid var(--line);
+  border-radius: 4px; height: 1.4rem; display: grid; place-items: center; align-self: start; margin-top: 1px; }
+.step-label b { font-weight: 600; font-size: .92rem; }
+.step-label small { color: var(--muted); font-size: .78rem; line-height: 1.35; }
+.lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-width: 0; }
+.lanes.one .tile { grid-column: span 2; }
+.tile { height: 54px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+  padding: 0; cursor: pointer; overflow: hidden; color: var(--ink); font: inherit; text-align: left;
+  display: grid; grid-template-columns: 40px 1fr;
+  transition: background-color .24s ease-out, border-color .24s ease-out, box-shadow .24s ease-out, scale .24s ease-out; }
+.tile:hover { border-color: var(--wave); background: var(--tint); transition-duration: .16s; }
+.tile:active { scale: .985; transition-duration: .08s; }
+.tile[aria-pressed="true"] { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+.tile .pi { display: grid; place-items: center; border-right: 1px solid var(--line); color: var(--navy);
+  transition: background-color .24s ease-out, color .24s ease-out; }
+.tile:hover .pi { transition-duration: .16s; }
+.tile .pi svg { width: 15px; height: 15px; fill: currentColor; }
+.tile .pi .i-pause, .tile[data-playing="true"] .pi .i-play { display: none; }
+.tile[data-playing="true"] .pi .i-pause { display: block; }
+.tile[data-playing="true"] .pi { background: var(--navy); color: var(--on-navy); border-right-color: var(--navy); }
+.tile .wv { position: relative; min-width: 0; }
+.tile .wv canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.tile .who { position: absolute; top: 5px; left: 8px; font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); background: var(--surface); border-radius: 4px; padding: 0 6px; pointer-events: none; z-index: 1; }
+.tile[aria-pressed="true"] .who { color: var(--navy); }
+.tile.na { cursor: not-allowed; opacity: .5; display: grid; grid-template-columns: 1fr; place-items: center; }
+.tile.na .who { position: static; background: none; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.said { display: grid; grid-template-columns: 13rem 1fr; gap: 6px 12px; font-size: .93rem; margin: 4px 0 0; }
+.said dt { color: var(--muted); font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding-top: 2px; }
+.said dd { margin: 0; min-width: 0; }
+mark { background: var(--mark-bg); color: var(--mark-ink); border-radius: 4px; padding: 1px 6px; margin: 0 -2px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+button:focus-visible, .main-wave:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+@media (max-width: 640px) {
+  h1 { font-size: 1.6rem; }
+  .step { grid-template-columns: 1fr; gap: 6px; }
+  .said { grid-template-columns: 1fr; gap: 2px; }
+  .said dd + dt { margin-top: 8px; }
+  .time { display: none; }
+  .keys { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::after { transition: none !important; } }
+</style>
+</head>
+<body>
+<header class="intro gutter"><div class="col">
+  <h1 id="title">Audio cleanup A/B</h1>
+  <p>Every spot inside the cut where the cleaned audio drops out against the original. Pick a pipeline, then press
+    play on any step. Pressing another step of the same spot while one plays switches at the same moment, so you
+    compare like for like; press the playing step again to pause.</p>
+  <p class="muted">Waveforms are drawn in decibels (−48 to 0 dBFS), so a dropout shows as a dip. The orange band marks
+    the dropout. Steps keep their real level next to the original; RE-USE and master results are loudness-matched to
+    the original so you compare content, not volume. Highlighted words are what Whisper did not hear in the selected
+    pipeline's result, and Whisper sometimes confuses near spellings.</p>
+  <p class="muted" id="splitscore"></p>
+</div></header>
+
+<div class="bar gutter"><div class="col">
+  <div class="bar-row">
+    <div class="tabs" role="tablist" aria-label="Pipeline" id="tabs"></div>
+    <button class="toggle" id="loop" type="button" aria-pressed="true"><span class="knob"></span>Loop</button>
+  </div>
+  <p class="pdesc" id="pdesc"></p>
+  <div class="keys"><span><kbd>1</kbd>–<kbd id="nkeys">3</kbd> pipeline</span><span><kbd>↑</kbd> <kbd>↓</kbd> step</span>
+    <span><kbd>←</kbd> <kbd>→</kbd> first / second speaker</span><span><kbd>Space</kbd> play or pause the last spot you touched</span></div>
+</div></div>
+
+<main class="gutter"><div class="col" id="list"></div></main>
+
+<script id="data" type="application/json">__DATA__</script>
+<script>
+(() => {
+  const META = JSON.parse(document.getElementById("data").textContent);
+  const DATA = META.spots;
+  const P = META.pipelines;  // [{k, label, desc, steps: [{id, label, sub, lanes: [track keys], who?}]}]
+  const ORDER = ["orig", "split", "spk", "reuse", "final"];
+  let pi = 0;
+  document.getElementById("nkeys").textContent = String(P.length);
+  if (META.title) { document.getElementById("title").textContent = META.title; document.title = META.title; }
+  const laneName = (sp, li) => (sp.d.lanes || ["Speaker A", "Speaker B"])[li];
+  const stepsFor = sp => P[pi].steps.filter(s => s.lanes.some(k => sp.d.tracks[k]));
+  let ctx = null, playing = null, focusSpot = null;
+  const loopBtn = document.getElementById("loop");
+  const spots = [];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const PLAY = '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l11-6.5a1 1 0 0 0 0-1.72l-11-6.5A1 1 0 0 0 8 5.5Z"/></svg>' +
+    '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
+
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = P.map((p, i) => `<button class="tab" role="tab" type="button" data-i="${i}"><span class="n">${i + 1}</span>${p.label}</button>`).join("");
+  tabs.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setPipeline(+b.dataset.i)));
+
+  const curStep = sp => { const st = stepsFor(sp); return st.find(s => s.id === sp.stepId) || st[st.length - 1]; };
+  const keyFor = sp => {
+    const step = curStep(sp), k = step.lanes[Math.min(sp.lane, step.lanes.length - 1)];
+    return sp.d.tracks[k] ? k : "orig";
+  };
+  const PLAY_SM = '<svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.8v14.4a1 1 0 0 0 1.5.86l12.2-7.2a1 1 0 0 0 0-1.72L8.5 3.94A1 1 0 0 0 7 4.8Z"/></svg>' +
+    '<svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="5.5" y="4" width="5" height="16" rx="1.2"/><rect x="13.5" y="4" width="5" height="16" rx="1.2"/></svg>';
+  function markPlaying(sp) {
+    const k = keyFor(sp), on = !!(playing && playing.sp === sp);
+    sp.tiles.forEach(t => {
+      const live = on && t.k === k;
+      t.el.dataset.playing = String(live);
+      t.el.setAttribute("aria-label", `${live ? "Pause" : "Play"} ${t.step.label}${t.step.lanes.length === 2 ? " " + laneName(sp, t.ln) : ""}`);
+    });
+  }
+
+  const list = document.getElementById("list");
+  for (const pod of [...new Set(DATA.map(d => d.pod))]) {
+    const items = DATA.filter(d => d.pod === pod);
+    const sec = document.createElement("section");
+    sec.style.display = "grid";
+    sec.innerHTML = `<div class="pod-head"><h2>${esc(pod)}</h2><span>${items.length} spots</span></div>`;
+    for (const d of items) {
+      const el = document.createElement("article");
+      el.className = "spot";
+      el.id = d.id;
+      el.innerHTML = `<div class="spot-head"><span class="tc">${d.timeline}</span>${d.kind ? `<span class="badge">${esc(d.kind)}</span>` : ""}
+          <span class="meta">dropout ${d.drop_dur.toFixed(2)} s, ${d.drop_at.toFixed(1)} s into the clip</span></div>
+        <div class="player">
+          <button class="play" type="button" aria-pressed="false" aria-label="Play ${d.timeline}">${PLAY}</button>
+          <div class="main-wave" tabindex="0" role="slider" aria-label="Seek" aria-valuemin="0" aria-valuemax="${d.dur}" aria-valuenow="0"><canvas></canvas></div>
+          <span class="time">0.0 / ${d.dur.toFixed(1)} s</span>
+        </div>
+        <p class="now"></p>
+        <ol class="steps"></ol>
+        <dl class="said"></dl>`;
+      sec.appendChild(el);
+      const sp = { d, el, offset: 0, bufs: null, loading: null, tiles: [], stepId: "final", lane: 0,
+        btn: el.querySelector(".play"), box: el.querySelector(".main-wave"), cv: el.querySelector(".main-wave canvas"),
+        time: el.querySelector(".time"), now: el.querySelector(".now"), stepsEl: el.querySelector(".steps"), said: el.querySelector(".said") };
+      spots.push(sp);
+      sp.btn.addEventListener("click", () => { focusSpot = sp; toggle(sp); });
+      sp.box.addEventListener("click", e => {
+        focusSpot = sp;
+        const r = sp.box.getBoundingClientRect();
+        seek(sp, Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * d.dur);
+      });
+      sp.box.addEventListener("keydown", e => {
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault(); e.stopPropagation();
+        focusSpot = sp;
+        seek(sp, Math.max(0, Math.min(d.dur, pos(sp) + (e.key === "ArrowLeft" ? -0.5 : 0.5))));
+      });
+      new ResizeObserver(() => drawSpot(sp)).observe(sp.box);
+    }
+    list.appendChild(sec);
+  }
+  focusSpot = spots[0];
+
+  function buildSteps(sp) {
+    const steps = stepsFor(sp);
+    sp.tiles = [];
+    sp.stepsEl.innerHTML = steps.map((s, si) => `<li class="step"><div class="step-label"><span class="sn">${si + 1}</span>
+        <b>${s.label}</b><small>${s.sub}</small></div>
+        <div class="lanes${s.lanes.length === 1 ? " one" : ""}">${s.lanes.map((k, li) => sp.d.tracks[k]
+          ? `<button class="tile" type="button" data-s="${s.id}" data-l="${li}" aria-pressed="false"><span class="pi">${PLAY_SM}</span><span class="wv"><span class="who">${s.lanes.length === 1 ? esc(s.who || "Mix") : esc(laneName(sp, li))}</span><canvas></canvas></span></button>`
+          : `<button class="tile na" type="button" disabled><span class="who">Not available for this spot</span></button>`).join("")}</div></li>`).join("");
+    sp.stepsEl.querySelectorAll(".tile:not(.na)").forEach(t => {
+      const tile = { el: t, cv: t.querySelector("canvas"), host: t.querySelector(".wv"),
+        step: steps.find(s => s.id === t.dataset.s), ln: +t.dataset.l };
+      tile.k = tile.step.lanes[tile.ln];
+      sp.tiles.push(tile);
+      t.addEventListener("click", () => {
+        focusSpot = sp;
+        const live = playing && playing.sp === sp;
+        if (live && keyFor(sp) === tile.k) { stop(true); return; }
+        select(sp, tile.step.id, tile.step.lanes.length === 2 ? tile.ln : undefined);
+        if (!live) start(sp);
+      });
+      new ResizeObserver(() => drawTile(sp, tile)).observe(tile.host);
+    });
+  }
+
+  function renderSpot(sp) {
+    const st = curStep(sp), k = keyFor(sp);
+    sp.tiles.forEach(t => t.el.setAttribute("aria-pressed", String(t.k === k)));
+    markPlaying(sp);
+    const ln = st.lanes.length === 2 ? ` · ${esc(laneName(sp, sp.lane))}` : "";
+    sp.now.innerHTML = `Now: <b>${esc(P[pi].label)} → ${esc(st.label)}${ln}</b>`;
+    const v = P[pi].k, t = sp.d.text, miss = new Set((sp.d.missing[v] || []));
+    const orig = (t.orig || "").split(" ").map((w, i) => miss.has(i) ? `<mark>${esc(w)}</mark>` : esc(w)).join(" ");
+    sp.said.innerHTML = `<dt>Original said</dt><dd>${orig}</dd>` +
+      (t[v] ? `<dt>${esc(P[pi].label)} final said</dt><dd>${esc(t[v])}</dd>` : "");
+    drawSpot(sp);
+  }
+
+  function setPipeline(i) {
+    if (i < 0 || i >= P.length) return;
+    pi = i;
+    for (const sp of spots) {
+      const ids = stepsFor(sp).map(s => s.id);
+      if (ids.includes(sp.stepId)) continue;
+      const want = ORDER.indexOf(sp.stepId);
+      sp.stepId = ORDER.slice(0, want + 1).reverse().find(id => ids.includes(id)) || "final";
+    }
+    tabs.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", String(+b.dataset.i === pi)));
+    document.getElementById("pdesc").textContent = P[pi].desc;
+    spots.forEach(sp => { buildSteps(sp); renderSpot(sp); });
+    route();
+  }
+
+  function select(sp, id, ln) {
+    sp.stepId = id;
+    if (ln !== undefined) sp.lane = ln;
+    renderSpot(sp);
+    if (playing && playing.sp === sp) route();
+  }
+
+  function route() {
+    if (!playing) return;
+    const k = keyFor(playing.sp);
+    for (const [key, n] of Object.entries(playing.nodes)) n.g.gain.setTargetAtTime(key === k ? 1 : 0, ctx.currentTime, 0.006);
+    markPlaying(playing.sp);
+  }
+
+  function pos(sp) {
+    if (playing && playing.sp === sp) {
+      let p = playing.off + (ctx.currentTime - playing.t0);
+      if (loopBtn.getAttribute("aria-pressed") === "true") p %= playing.dur;
+      return Math.max(0, Math.min(p, sp.d.dur));
+    }
+    return sp.offset;
+  }
+
+  function paint(cv, host, sp, tr, big) {
+    const r = host.getBoundingClientRect();
+    if (!r.width || !tr) return;
+    const dpr = window.devicePixelRatio || 1, W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const g = cv.getContext("2d"), d = sp.d, pk = tr.peaks, n = pk.length, p = pos(sp) / d.dur;
+    g.clearRect(0, 0, W, H);
+    const x0 = d.drop_at / d.dur * W, x1 = Math.max(x0 + 3 * dpr, (d.drop_at + d.drop_dur) / d.dur * W);
+    g.fillStyle = css("--drop"); g.fillRect(x0, 0, x1 - x0, H);
+    g.fillStyle = css("--drop-edge"); g.fillRect(x0, 0, dpr, H); g.fillRect(x1 - dpr, 0, dpr, H);
+    const bw = W / n, mid = H / 2, half = H / 2 - (big ? 6 : 4) * dpr, wc = css("--wave"), pc = css("--wave-played");
+    for (let i = 0; i < n; i++) {
+      const h = Math.max(dpr, pk[i] / 99 * half);
+      g.fillStyle = (i + 0.5) / n <= p ? pc : wc;
+      g.fillRect(i * bw + bw * 0.15, mid - h, Math.max(1, bw * 0.7), 2 * h);
+    }
+    if (tr.curve) {
+      g.strokeStyle = css("--curve"); g.lineWidth = 1.5 * dpr; g.beginPath();
+      let on = false;
+      tr.curve.forEach((db, i) => {
+        if (db === null) { on = false; return; }
+        const x = (i + 0.5) * bw, y = H - 3 * dpr - (db + 6) / 30 * (H - 6 * dpr);
+        on ? g.lineTo(x, y) : g.moveTo(x, y); on = true;
+      });
+      g.stroke();
+    }
+    if (p > 0) { g.fillStyle = pc; g.fillRect(Math.min(W - 2 * dpr, p * W), 0, 2 * dpr, H); }
+  }
+
+  function drawTile(sp, t) { paint(t.cv, t.host, sp, sp.d.tracks[t.k], false); }
+  function drawSpot(sp) {
+    paint(sp.cv, sp.box, sp, sp.d.tracks[keyFor(sp)], true);
+    sp.tiles.forEach(t => drawTile(sp, t));
+    sp.time.textContent = `${pos(sp).toFixed(1)} / ${sp.d.dur.toFixed(1)} s`;
+    sp.box.setAttribute("aria-valuenow", pos(sp).toFixed(1));
+  }
+
+  function load(sp) {
+    if (sp.bufs) return Promise.resolve(sp.bufs);
+    if (!sp.loading) {
+      sp.loading = Promise.all(Object.entries(sp.d.tracks).map(([k, v]) =>
+        fetch(v.src).then(r => { if (!r.ok) throw new Error(v.src); return r.arrayBuffer(); })
+          .then(b => ctx.decodeAudioData(b)).then(buf => [k, buf])))
+        .then(e => (sp.bufs = Object.fromEntries(e)))
+        .catch(err => { sp.loading = null; throw err; });
+    }
+    return sp.loading;
+  }
+
+  function stop(keep) {
+    if (!playing) return;
+    const sp = playing.sp, p = pos(sp);
+    for (const n of Object.values(playing.nodes)) { n.src.onended = null; try { n.src.stop(); } catch (e) {} n.src.disconnect(); }
+    playing = null;
+    sp.offset = keep && p < sp.d.dur - 0.05 ? p : 0;
+    sp.btn.setAttribute("aria-pressed", "false");
+    sp.btn.setAttribute("aria-label", `Play ${sp.d.timeline}`);
+    markPlaying(sp);
+    drawSpot(sp);
+  }
+
+  async function start(sp) {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state !== "running") await ctx.resume();
+    if (playing) stop(true);
+    sp.btn.dataset.busy = "true";
+    let bufs;
+    try { bufs = await load(sp); }
+    catch (e) { sp.btn.dataset.busy = "false"; sp.time.textContent = "Audio failed to load"; return; }
+    sp.btn.dataset.busy = "false";
+    if (playing) stop(true);
+    const dur = Math.min(...Object.values(bufs).map(b => b.duration));
+    const off = sp.offset >= dur - 0.05 ? 0 : sp.offset;
+    const t0 = ctx.currentTime + 0.04, loop = loopBtn.getAttribute("aria-pressed") === "true", k = keyFor(sp);
+    const nodes = {};
+    for (const [key, buf] of Object.entries(bufs)) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = loop;
+      if (loop) { src.loopStart = 0; src.loopEnd = dur; }
+      const g = ctx.createGain();
+      g.gain.value = key === k ? 1 : 0;
+      src.connect(g).connect(ctx.destination);
+      src.start(t0, off);
+      nodes[key] = { src, g };
+    }
+    Object.values(nodes)[0].src.onended = () => { if (playing && playing.nodes === nodes) stop(false); };
+    playing = { sp, nodes, t0, off, dur };
+    sp.btn.setAttribute("aria-pressed", "true");
+    sp.btn.setAttribute("aria-label", `Pause ${sp.d.timeline}`);
+    markPlaying(sp);
+    const tick = () => { if (playing && playing.nodes === nodes) { drawSpot(sp); requestAnimationFrame(tick); } };
+    requestAnimationFrame(tick);
+  }
+
+  function toggle(sp) { if (playing && playing.sp === sp) stop(true); else start(sp); }
+  function seek(sp, t) {
+    if (playing && playing.sp === sp) { stop(false); sp.offset = t; start(sp); }
+    else { sp.offset = t; drawSpot(sp); }
+  }
+
+  loopBtn.addEventListener("click", () => {
+    loopBtn.setAttribute("aria-pressed", String(loopBtn.getAttribute("aria-pressed") !== "true"));
+    if (playing) { const sp = playing.sp; stop(true); start(sp); }
+  });
+
+  document.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (/^[1-9]$/.test(e.key)) { if (+e.key <= P.length) setPipeline(+e.key - 1); return; }
+    const sp = focusSpot;
+    if (!sp) return;
+    const st = stepsFor(sp), si = st.indexOf(curStep(sp));
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const nx = st[Math.max(0, Math.min(st.length - 1, si + (e.key === "ArrowUp" ? -1 : 1)))];
+      select(sp, nx.id);
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); select(sp, sp.stepId, e.key === "ArrowLeft" ? 0 : 1); return; }
+    if (e.code === "Space" && !(e.target instanceof HTMLButtonElement)) { e.preventDefault(); toggle(sp); }
+  });
+
+  const redraw = () => spots.forEach(drawSpot);
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", redraw); } catch (e) {}
+  new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (META.score) document.getElementById("splitscore").textContent = META.score;
+  setPipeline(pi);
+})();
+</script>
+</body>
+</html>

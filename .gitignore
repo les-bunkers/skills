@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv*/
+.uv/
+node_modules/
+.DS_Store
+Thumbs.db
+*.local.json
+# media never belongs in this repo
+*.mp4
+*.mov
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.webm
+*.mxf
+*.braw
