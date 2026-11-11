@@ -9,18 +9,35 @@ hallucinations than generative restorers.
 
 | Repo | License | Use |
 |---|---|---|
-| [nvidia/NVIDIA-NemotronLabs-RE-USE](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE) | OpenMDW-1.1, "ready for commercial use" | **default** |
-| [nvidia/NVIDIA-NemotronLabs-RE-USE-laughter](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE-laughter) | OpenMDW-1.1 | when laughter must survive (card: "better preserves laughter"; VocalSound added to training) |
-| [nvidia/RE-USE](https://huggingface.co/nvidia/RE-USE) | NSCLv1, non-commercial only | non-commercial work; the measurements below were made with it |
+| [nvidia/NVIDIA-NemotronLabs-RE-USE-laughter](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE-laughter) | OpenMDW-1.1 | **default** since 0.2.0: fewest dropouts in the three-checkpoint test below; keeps laughter (card: "better preserves laughter"; VocalSound added to training) |
+| [nvidia/NVIDIA-NemotronLabs-RE-USE](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE) | OpenMDW-1.1, "ready for commercial use" | alternative (default in 0.1.x); drops more words on two-speaker audio |
+| [nvidia/RE-USE](https://huggingface.co/nvidia/RE-USE) | NSCLv1, non-commercial only | non-commercial work; the listening test and behaviour notes below were made with it |
 
 All three ship the same SEMamba d4 code (the files differ only in their license headers), the same recipe and a
 38,592,940-byte `model.safetensors`; the weights differ. The runner handles them identically.
 
-### Default vs non-commercial, same input (measured)
+### Three checkpoints on real edits (measured)
+
+French speech, RTX 5090, same runner, each output RMS-matched to its source: 5 one-voice studio takes and 2
+two-speaker podcast episodes (mixed to one track, 15.6 min inside the edit). Dropout = 50 ms frames where the
+source is louder than −30 dBFS but the output sits ≥ 15 dB under it, merged, ≥ 100 ms, counted inside the edit only.
+
+| | non-commercial | NemotronLabs | NemotronLabs -laughter |
+|---|---|---|---|
+| dropouts, podcast A (9.0 min) | 13 | 6 | **0** |
+| dropouts, podcast B (6.6 min) | 6 | 4 | **2** |
+| dropouts, 5 studio takes | 0 | 0 | 1 (short) |
+| lag vs source | 0 | 0 | 0 |
+| speed | 4.5–5× realtime | 5.7× | 5.6× |
+
+After a blind listening page (original + the three shuffled per spot, 49 spots: every dropout region plus random
+moments) the studio chose -laughter; the plain NemotronLabs output was judged "not so good" on the podcasts.
+
+### Plain NemotronLabs vs non-commercial, same input (measured)
 
 59 s of one-voice studio speech, RTX 5090, same runner:
 
-| | non-commercial | NemotronLabs (default) |
+| | non-commercial | NemotronLabs |
 |---|---|---|
 | speed / peak VRAM | 4.6× realtime / 2.83 GiB | 5.7× realtime / 2.83 GiB |
 | lag vs source (3 probes) | 0, 0, 0 | 0, 0, 0 (also 0 against each other) |
@@ -31,9 +48,9 @@ All three ship the same SEMamba d4 code (the files differ only in their license 
 | dropout frames (source > −30 dBFS, output ≥ 15 dB under) | 3 | 3 |
 
 The two outputs correlate at 0.991 after RMS matching (difference signal −17.5 dB under the result), and no 50 ms
-frame differs by more than 6 dB between them. On this excerpt the default is a drop-in replacement; the ear
-decides the rest. The behaviour notes below come from the non-commercial checkpoint and have not been
-re-measured on the default.
+frame differs by more than 6 dB between them. On this short one-voice excerpt plain NemotronLabs is a drop-in
+replacement; on longer two-speaker material it drops more (table above). The behaviour notes below come from the
+non-commercial checkpoint and have not been re-measured on the others.
 
 ## Why RE-USE
 

@@ -1,6 +1,6 @@
 {
   "name": "audio-cleanup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Speech cleanup for a DaVinci Resolve edit, on your own GPU: reads what the timelines play, splits two speakers sharing one source, enhances speech with NVIDIA RE-USE, masters to -14 LUFS, checks loudness, true peak and sync, places the tracks back in Resolve and builds an A/B listening page.",
   "author": {
     "name": "Les Bunkers",

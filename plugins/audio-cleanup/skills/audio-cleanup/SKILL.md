@@ -23,7 +23,7 @@ The scripts find the GPU pieces through env vars, `<job>/job.local.json` keys, o
 | `AUDIO_CLEANUP_HOME` (`home`) | folder holding `venv-gpu/` and `models/` | none |
 | `AUDIO_CLEANUP_REUSE_PYTHON` (`reuse_python`) | python of the GPU venv | `<home>/venv-gpu/…/python` |
 | `AUDIO_CLEANUP_DIAR_PYTHON` (`diar_python`) | python with pyannote.audio | the RE-USE python |
-| `AUDIO_CLEANUP_REUSE_DIR` (`reuse_dir`) | `hf download nvidia/NVIDIA-NemotronLabs-RE-USE` folder | `<home>/models/RE-USE` |
+| `AUDIO_CLEANUP_REUSE_DIR` (`reuse_dir`) | `hf download nvidia/NVIDIA-NemotronLabs-RE-USE-laughter` folder | `<home>/models/RE-USE` |
 | `AUDIO_CLEANUP_PYANNOTE` (`pyannote`) | community-1 folder or HF id | `<home>/models/speaker-diarization-community-1`, else the HF id + `HF_TOKEN` |
 | `AUDIO_CLEANUP_GPU_LOCK` | lock dir shared with other GPU jobs | no lock |
 
@@ -143,8 +143,9 @@ Any input ffmpeg reads; output 48 kHz mono float WAV with the same length and ti
   track) instead of a split. The split handles exactly two speakers; overlapping speech and backchannels stay in
   the owner's track and RE-USE may remove the second voice there.
 - One fps per source file. RE-USE needs an NVIDIA GPU (no CPU mode); macOS can plan, place and build pages only.
-- Default weights = NVIDIA NemotronLabs RE-USE (OpenMDW-1.1, commercial use allowed, outputs unrestricted). The
-  older `nvidia/RE-USE` checkpoint is non-commercial only (NSCLv1): point `reuse_dir` at it only for
-  non-commercial work. A `-laughter` variant keeps laughter better. Details: [setup](../../references/setup.md) §3.
+- Default weights = NVIDIA NemotronLabs RE-USE-laughter (OpenMDW-1.1, commercial use allowed, outputs
+  unrestricted; it dropped the fewest words in a three-checkpoint test). Plain NemotronLabs RE-USE (same license)
+  runs the same way. The older `nvidia/RE-USE` checkpoint is non-commercial only (NSCLv1): point `reuse_dir` at it
+  only for non-commercial work. Details: [setup](../../references/setup.md) §3, [reuse](../../references/reuse.md).
 - Technical checks never prove the words survived: RE-USE can suppress a word while sync and loudness pass. The
   A/B page and the user's ears are the gate.

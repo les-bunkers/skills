@@ -133,7 +133,7 @@ def reuse_dir():
     p = tool("reuse_dir", "AUDIO_CLEANUP_REUSE_DIR", h / "models" / "RE-USE" if h else None)
     if not p or not (p / "models").is_dir():
         raise SystemExit(f"RE-USE download not found ({p}): set AUDIO_CLEANUP_REUSE_DIR or --home "
-                         "(hf download nvidia/NVIDIA-NemotronLabs-RE-USE, references/setup.md)")
+                         "(hf download nvidia/NVIDIA-NemotronLabs-RE-USE-laughter, references/setup.md)")
     return p
 
 

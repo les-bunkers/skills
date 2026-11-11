@@ -3,9 +3,9 @@
 Runs in the GPU venv (references/setup.md): torch (CUDA), einops, huggingface-hub, safetensors, pyyaml, soundfile,
 numpy, triton (triton-windows on Windows). RE-USE's own model code and weights are NOT in this plugin: download
 them yourself and point --reuse-dir / env AUDIO_CLEANUP_REUSE_DIR at that folder. Default checkpoint:
-`hf download nvidia/NVIDIA-NemotronLabs-RE-USE --local-dir <dir>` (OpenMDW-1.1, commercial use allowed).
-Same layout and code path: nvidia/NVIDIA-NemotronLabs-RE-USE-laughter (keeps laughter better, OpenMDW-1.1) and
-nvidia/RE-USE (NVIDIA One-Way Noncommercial License: non-commercial use only). This adapter imports `models.*`
+`hf download nvidia/NVIDIA-NemotronLabs-RE-USE-laughter --local-dir <dir>` (OpenMDW-1.1, commercial use allowed).
+Same layout and code path: nvidia/NVIDIA-NemotronLabs-RE-USE (OpenMDW-1.1, drops more words on two-speaker audio)
+and nvidia/RE-USE (NVIDIA One-Way Noncommercial License: non-commercial use only). This adapter imports `models.*`
 and `utils.util` from that folder; `mamba_ssm` comes from the bundled pure-PyTorch + Triton stand-in (scripts/mamba_shim), so no CUDA toolchain
 is needed to build mamba kernels.
 
@@ -101,7 +101,7 @@ def main():
     ap.add_argument("input", type=Path, nargs="?")
     ap.add_argument("--out", type=Path)
     ap.add_argument("--reuse-dir", type=Path, default=os.environ.get("AUDIO_CLEANUP_REUSE_DIR"),
-                    help="folder of the RE-USE download, default checkpoint nvidia/NVIDIA-NemotronLabs-RE-USE "
+                    help="folder of the RE-USE download, default checkpoint nvidia/NVIDIA-NemotronLabs-RE-USE-laughter "
                          "(env AUDIO_CLEANUP_REUSE_DIR)")
     ap.add_argument("--seconds", type=float, default=None, help="only the first S seconds (quick bench)")
     ap.add_argument("--selfcheck", action="store_true", help="compare the Triton scan with the PyTorch scan")
@@ -112,7 +112,7 @@ def main():
         ap.error("INPUT and --out are required")
     if not args.reuse_dir or not (Path(args.reuse_dir) / "models").is_dir():
         sys.exit("RE-USE folder not found: pass --reuse-dir or set AUDIO_CLEANUP_REUSE_DIR "
-                 "(hf download nvidia/NVIDIA-NemotronLabs-RE-USE --local-dir <dir>, see references/setup.md)")
+                 "(hf download nvidia/NVIDIA-NemotronLabs-RE-USE-laughter --local-dir <dir>, see references/setup.md)")
     reuse_dir = Path(args.reuse_dir).resolve()
     sys.path.insert(0, str(reuse_dir))
 

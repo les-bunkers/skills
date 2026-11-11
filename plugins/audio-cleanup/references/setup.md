@@ -1,7 +1,7 @@
 # Setup
 
-One-time install per machine. Everything is local and free. Model licenses: NVIDIA NemotronLabs RE-USE (default
-enhancer) OpenMDW-1.1, commercial use allowed; pyannote community-1 (split only) gated, CC-BY-4.0.
+One-time install per machine. Everything is local and free. Model licenses: NVIDIA NemotronLabs RE-USE-laughter
+(default enhancer) OpenMDW-1.1, commercial use allowed; pyannote community-1 (split only) gated, CC-BY-4.0.
 
 | Script | Runs in | Needs |
 |---|---|---|
@@ -58,14 +58,18 @@ Without Triton it falls back to the PyTorch loop (much slower). Env `REUSE_NO_TR
 macOS: no CUDA, and the official RE-USE inference has no CPU mode, so `reuse` cannot run there. Planning,
 placing, mastering an existing RE-USE result and the A/B page work.
 
-## 3. RE-USE weights (default: NVIDIA NemotronLabs RE-USE, commercial use allowed)
+## 3. RE-USE weights (default: NVIDIA NemotronLabs RE-USE-laughter, commercial use allowed)
 
-- Default model: [nvidia/NVIDIA-NemotronLabs-RE-USE](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE),
-  not gated, model card: "ready for commercial use". 9.6 M parameters (bi-directional Mamba, 30 layers),
+- Default model: [nvidia/NVIDIA-NemotronLabs-RE-USE-laughter](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE-laughter),
+  not gated, model card: "better preserves laughter while restoring the quality of the input speech" (VocalSound
+  added to the training of [nvidia/NVIDIA-NemotronLabs-RE-USE](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE),
+  "ready for commercial use"). Default because it dropped the fewest words in a three-checkpoint test on French
+  studio and podcast speech ([reuse](reuse.md)). 9.6 M parameters (bi-directional Mamba, 30 layers),
   8–48 kHz mono, language-agnostic, ~2500 h of training speech. Papers: Fu et al., [arXiv 2603.02641](https://arxiv.org/abs/2603.02641)
   and [arXiv 2606.25621](http://arxiv.org/abs/2606.25621). Its card notes that on overlapping speech it keeps the
-  main speaker and suppresses the others (one reason the split exists).
-- License: OpenMDW-1.1 (`LICENSE` in the download, identical in the -laughter repo). It grants use, modification
+  main speaker and suppresses the others (one reason the split exists). Its `config.json` nests the settings
+  under `cfg`; the runner reads the recipe yaml and passes it explicitly, so this does not matter (verified).
+- License: OpenMDW-1.1 (`LICENSE` in the download, identical in the plain NemotronLabs repo). It grants use, modification
   and distribution of the "Model Materials" (weights, code, docs) free of charge, commercial use included, and
   puts no restriction or obligation on the outputs (your cleaned audio). Obligations: if you distribute any
   portion of the Model Materials, ship a copy of the agreement and keep the copyright and origin notices
@@ -75,7 +79,7 @@ placing, mastering an existing RE-USE result and the A/B page work.
   imports the model code from your download.
 - Download (no login, ~37 MB):
   ```bash
-  "$H/venv-gpu/Scripts/hf" download nvidia/NVIDIA-NemotronLabs-RE-USE --local-dir "$H/models/RE-USE"   # Linux: venv-gpu/bin/hf
+  "$H/venv-gpu/Scripts/hf" download nvidia/NVIDIA-NemotronLabs-RE-USE-laughter --local-dir "$H/models/RE-USE"   # Linux: venv-gpu/bin/hf
   ```
   `reuse_file.py` needs `models/`, `utils/`, `recipes/*.yaml` and `model.safetensors` from that folder.
 
@@ -84,7 +88,7 @@ or `reuse_dir` at it):
 
 | Repo | License | Differs in |
 |---|---|---|
-| `nvidia/NVIDIA-NemotronLabs-RE-USE-laughter` | OpenMDW-1.1, commercial | card: "better preserves laughter while restoring the quality of the input speech"; VocalSound added to training; full-set scores within ±0.05 of the default (PESQ 2.60 vs 2.57, NISQA 4.27 vs 4.33). Its `config.json` nests the settings under `cfg`; the runner reads the recipe yaml and passes it explicitly, so this should not matter (not run here). |
+| `nvidia/NVIDIA-NemotronLabs-RE-USE` | OpenMDW-1.1, commercial | The first commercial release, without the laughter data; card full-set scores close to the default (PESQ 2.57 vs 2.60, NISQA 4.33 vs 4.27). In our test it dropped more words on two-speaker podcast audio (10 vs 2 dropouts in 15.6 min, [reuse](reuse.md)). |
 | `nvidia/RE-USE` | NVIDIA One-Way Noncommercial License (NSCLv1, https://github.com/NVlabs/HMAR/blob/main/LICENSE) | **Non-commercial research and educational use only**, covering weights and code; derivatives keep the limit; breaking it ends the license. Earlier checkpoint (`30USEMamba_peak+GAN_tel_mic_1134k`) with other training data; the listening test and the behaviour notes in reuse.md were made with it. Use it only if your work is non-commercial. |
 
 ## 4. pyannote speaker-diarization-community-1 (two-speaker split only)
@@ -129,7 +133,7 @@ per 4–6 s clip on a 12-thread desktop CPU, three transcriptions per spot, cach
 | `AUDIO_CLEANUP_HOME` | cleanup.py | folder with `venv-gpu/` and `models/{RE-USE,speaker-diarization-community-1}` |
 | `AUDIO_CLEANUP_REUSE_PYTHON` | cleanup.py | GPU venv python (default `<home>/venv-gpu/Scripts/python.exe` or `bin/python`) |
 | `AUDIO_CLEANUP_DIAR_PYTHON` | cleanup.py | python with pyannote.audio (default: the RE-USE python) |
-| `AUDIO_CLEANUP_REUSE_DIR` | cleanup.py, reuse_file.py | RE-USE download folder (default checkpoint: NemotronLabs RE-USE) |
+| `AUDIO_CLEANUP_REUSE_DIR` | cleanup.py, reuse_file.py | RE-USE download folder (default checkpoint: NemotronLabs RE-USE-laughter) |
 | `AUDIO_CLEANUP_PYANNOTE` | cleanup.py, diarize.py | community-1 folder, or the HF id |
 | `AUDIO_CLEANUP_GPU_LOCK` | reuse_file.py, diarize.py | lock directory (atomic mkdir, 15 s retry, own stale locks cleared after 20 min) |
 | `HF_TOKEN` | diarize.py, `hf download` | Hugging Face read token (gated pyannote model) |
@@ -141,7 +145,7 @@ The same keys without the prefix (`reuse_python`, `reuse_dir`, …) can go in `<
 
 | What | Figure |
 |---|---|
-| RE-USE, RTX 5090 | 4.5–5× realtime per track (non-commercial checkpoint), 5.7× (NemotronLabs default, one 59 s file); only the used ranges ± 2 s are processed |
+| RE-USE, RTX 5090 | 4.5–5× realtime per track (non-commercial checkpoint), 5.6–5.7× (NemotronLabs and -laughter); only the used ranges ± 2 s are processed |
 | RE-USE, RTX 4070 Ti (another app holding 5 GB VRAM) | 1.0× realtime, 2.4 s per 5 s chunk; a 1 h track ≈ 1 h of GPU |
 | RE-USE VRAM / RAM | 2.6–2.8 GiB peak; constant RAM (streams chunk by chunk). Batch size 1 only. Hop 0.5 = every sample processed twice |
 | Diarization, RTX 5090 | the whole source is diarized, not just the cut: a 68 min source in 33 s (123× realtime), 1.6 GiB peak VRAM, 80 s with model load and decode |
