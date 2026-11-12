@@ -17,6 +17,7 @@ argument-hint: "[video name] [formats]"
 3. Per format: `hyperframes check --json > ../check.json 2>/dev/null` (`ok: true`; unread-line warnings on speech captions are expected) → `hyperframes render . --output ../renders/<slug>_<fmt>.mp4 --quiet`. One render chain at a time (≈ 25 s per 13 s of video per format on a fast GPU machine).
 4. Loudness on every render that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loudness.py" fix ../renders/<slug>_<fmt>.mp4 ../final/<slug>_<fmt>.mp4 --json ../final/loudness.json`.
 5. Contact sheet per format (`ffmpeg -i <final> -vf "fps=1/2,scale=270:-1,tile=6x4" -frames:v 1 sheet.jpg`) and look at it: hook legible, no caption on a face, nothing under platform UI.
+6. Assertions per format: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/decide.py" run short --media ../final/<slug>_<fmt>.mp4 --var hook="<hook text>" --var cta="<closing text>" --json ../qc/decide-<fmt>.json` (~45 requests, ~$0.005, seconds). Fail → fix and re-render; unsure → look at `../qc/decide-<fmt>_frames/`. After a re-render, the same command is the regression test: cached checks of unchanged frames are free. Method and limits: [decide](${CLAUDE_PLUGIN_ROOT}/references/decide.md).
 
 ## Motion and offer graphics
 

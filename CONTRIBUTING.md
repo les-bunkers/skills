@@ -49,9 +49,10 @@ A skill named `tighten` in plugin `videos` is `/videos:tighten`, or `/tighten` w
   | xAI (Grok speech-to-text) | `XAI_API_KEY` | `XAI_BASE_URL` (`https://api.x.ai/v1`) |
   | ElevenLabs (Scribe) | `ELEVENLABS_API_KEY` | `ELEVENLABS_BASE_URL` (`https://api.elevenlabs.io`) |
   | OpenAI (transcription) | `OPENAI_API_KEY` | `OPENAI_BASE_URL` (`https://api.openai.com/v1`) |
+  | Google Gemini (Decisions API, visual checks) | `GEMINI_API_KEY` | `GEMINI_BASE_URL` (`https://generativelanguage.googleapis.com`) |
   | Hugging Face (gated weights) | `HF_TOKEN` | |
 
-  Base URLs follow each official SDK's own convention (OpenAI and xAI include `/v1`, ElevenLabs doesn't), so the same variables work for the SDKs and for these scripts. Paths are appended to them: `$OPENAI_BASE_URL/audio/transcriptions`, `$XAI_BASE_URL/stt`, `$ELEVENLABS_BASE_URL/v1/speech-to-text`. Strip one trailing `/`.
+  Base URLs follow each official SDK's own convention (OpenAI and xAI include `/v1`, ElevenLabs and Gemini don't), so the same variables work for the SDKs and for these scripts. Paths are appended to them: `$OPENAI_BASE_URL/audio/transcriptions`, `$XAI_BASE_URL/stt`, `$ELEVENLABS_BASE_URL/v1/speech-to-text`, `$GEMINI_BASE_URL/v1beta/decisions`. Strip one trailing `/`.
 
 - Paid calls: the skill says what costs money and asks before the first paid call of a job. Results are cached next to the job and never re-requested when the cache exists.
 

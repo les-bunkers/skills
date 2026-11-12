@@ -12,7 +12,7 @@ argument-hint: "[batch name]"
 2. audio: the cleaned speech must cover every new range; a range outside the cleaned audio masters to silence → check before prep.
 3. prep → plan (faces, sticky crops, stacked layout, contact sheet), transcript review (paid second transcript, cached once per clip), master (−14 LUFS, the episode's LUT).
 4. Agent step: transcript fixes per clip (verbatim spoken text, `CHECK:` when unsure) + hook; edge fixes where another voice leaks in at a cut.
-5. final → captions and hook per look → `hyperframes check` → render → QC; sheets, review page (every clip × look, CHECK words, QC, post text, posting calendar), covers.
+5. final → captions and hook per look → `hyperframes check` → render → QC; sheets, review page (every clip × look, CHECK words, QC, post text, posting calendar), covers. Visual QC per clip: `decide.py run short --media <clip> --var hook="<hook>" --var cta="<closing text>" --json <clip>.decide.json` (`--skip cta_text` when clips end without one). Cover candidates: `decide.py pick <clip> --at <t1>,<t2>,… --res medium --score "How well does this frame work as a cover thumbnail?" unusable weak good excellent --gate "The person's eyes are closed or half-closed."` drops blinks and mid-word grimaces; the taste ranking is weak, so offer the kept frames to the human ([decide](${CLAUDE_PLUGIN_ROOT}/references/decide.md)).
 6. Gate: the human picks the look and clears the CHECK words on the review page. Status `review` until then.
 7. Export → upload-ready files + post text, one `artifacts/videos/<clip-slug>/` per clip (`/videos:publish`).
 

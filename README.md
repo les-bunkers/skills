@@ -46,6 +46,8 @@ Every video gets one record, `.agents/videos/<slug>/video.md`: one line per stag
 
 Put a `videos.json` at the root of your project (or of a folder holding several clients' workspaces) to set where those folders go; `uv run <plugin>/scripts/videos.py where` shows what it found. Details: [records](plugins/videos/references/records.md).
 
+Agents check renders with `scripts/decide.py`: yes/no, choice and score questions on stills, spans or audio of a video, answered with calibrated probabilities in about a second (Gemini Decisions API). After an edit it works like a unit test (hook present, no caption on a face, face inside the frame, grade applied, no password on screen); it also drops bad takes and blinking cover frames, and `calibrate` picks the wording and threshold of a new check on labelled examples. Details, measurements and limits: [decide](plugins/videos/references/decide.md).
+
 ## What it assumes
 
 - Claude Code with Bash, Python 3.11+, [uv](https://docs.astral.sh/uv/) and ffmpeg on PATH.
@@ -55,7 +57,7 @@ Put a `videos.json` at the root of your project (or of a folder holding several 
 
 ## Paid services
 
-Some steps call paid speech-to-text APIs (xAI Grok, ElevenLabs Scribe, OpenAI). The skills ask before the first paid call of a job and cache every result next to the job, so a rerun never pays twice. Keys come from environment variables (`XAI_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `HF_TOKEN`); each provider also reads a `*_BASE_URL`, so you can route calls through a local key proxy instead of exporting keys.
+Some steps call paid speech-to-text APIs (xAI Grok, ElevenLabs Scribe, OpenAI), and visual checks call the Gemini Decisions API (about half a cent per short). The skills ask before the first paid call of a job and cache every result, so a rerun never pays twice. Keys come from environment variables (`XAI_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`); each provider also reads a `*_BASE_URL`, so you can route calls through a local key proxy instead of exporting keys.
 
 ## Contributing
 

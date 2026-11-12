@@ -46,6 +46,8 @@ Chaque vidéo a une fiche, `.agents/videos/<slug>/video.md` : une ligne par éta
 
 Un `videos.json` à la racine de ton projet (ou d'un dossier qui regroupe les espaces de plusieurs clients) indique où vont ces dossiers; `uv run <plugin>/scripts/videos.py where` montre ce qu'il a trouvé. Détails (en anglais) : [records](plugins/videos/references/records.md).
 
+Les agents vérifient les rendus avec `scripts/decide.py` : des questions oui/non, à choix ou à échelle sur des images, des segments ou l'audio d'une vidéo, avec des probabilités calibrées en une seconde environ (API Gemini Decisions). Après une retouche, il sert de test unitaire (accroche présente, pas de sous-titre sur un visage, visage dans le cadre, étalonnage appliqué, aucun mot de passe à l'écran); il écarte aussi les prises ratées et les images de couverture aux yeux fermés, et `calibrate` choisit la formulation et le seuil d'une nouvelle vérification à partir d'exemples étiquetés. Détails, mesures et limites (en anglais) : [decide](plugins/videos/references/decide.md).
+
 ## Ce qu'il faut
 
 - Claude Code avec Bash, Python 3.11+, [uv](https://docs.astral.sh/uv/) et ffmpeg dans le PATH.
@@ -55,7 +57,7 @@ Un `videos.json` à la racine de ton projet (ou d'un dossier qui regroupe les es
 
 ## Services payants
 
-Certaines étapes appellent des API payantes de transcription (xAI Grok, ElevenLabs Scribe, OpenAI). Les skills demandent la permission avant le premier appel payant d'un travail et gardent chaque résultat à côté du travail : une reprise ne paie jamais deux fois. Les clés viennent de variables d'environnement (`XAI_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `HF_TOKEN`); chaque fournisseur lit aussi un `*_BASE_URL`, ce qui permet de passer par un proxy local de clés plutôt que d'exporter les clés.
+Certaines étapes appellent des API payantes de transcription (xAI Grok, ElevenLabs Scribe, OpenAI), et les vérifications visuelles appellent l'API Gemini Decisions (environ un demi-cent par court). Les skills demandent la permission avant le premier appel payant d'un travail et gardent chaque résultat en cache : une reprise ne paie jamais deux fois. Les clés viennent de variables d'environnement (`XAI_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `HF_TOKEN`); chaque fournisseur lit aussi un `*_BASE_URL`, ce qui permet de passer par un proxy local de clés plutôt que d'exporter les clés.
 
 ## Contribuer
 

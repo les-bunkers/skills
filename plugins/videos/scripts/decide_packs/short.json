@@ -1,0 +1,38 @@
+{
+ "about": "Finished short (any aspect) with burned-in captions: hook, call to action, caption placement, face framing, grade, secrets on screen. Vars: hook (headline text), cta (closing text, e.g. the URL). Wordings and thresholds calibrated with `decide.py calibrate` on labelled frames of a 9:16 talking-head short and mutated copies (caption moved onto the face, reframe off by 250 px, grade removed, Wi-Fi password on screen); see references/decide.md. A 48 s short = ~45 requests, ~45k tokens, ~$0.005, ~5 s.",
+ "min_confidence": 0.6,
+ "samples": {
+  "opening": {"at": [0.4, 1.2], "res": "high"},
+  "closing": {"at": [-1.2, -0.4], "res": "high"},
+  "spread": {"every": 3, "each": true, "res": "medium"},
+  "grade": {"every": 8, "each": true, "res": "low"},
+  "screens": {"every": 2, "each": true, "res": "high"}
+ },
+ "checks": [
+  {"id": "hook_text", "sample": "opening",
+   "ask": "The large headline text on screen reads «{hook}» (line breaks, letter case and colours do not matter).",
+   "expect": ">=0.6"},
+  {"id": "cta_text", "sample": "closing",
+   "ask": "The text «{cta}» is visible on screen.",
+   "expect": ">=0.6"},
+  {"id": "caption_off_face", "sample": "spread",
+   "ask": "A line of on-screen text is placed over the middle of the speaker's face, hiding part of it.",
+   "yes": "letters sit directly on the face (eyes, nose, mouth or beard)",
+   "no": "all text is below the chin, above the head, or there is no face",
+   "expect": "<0.4",
+   "why": "calibrated per video (worst frame decides): clean shorts peak at 0.28, a caption moved onto the face peaks at 0.76; per frame AUC 1.00 on 31 labelled frames"},
+  {"id": "face_in_frame", "sample": "spread",
+   "ask": "The person's head is cropped by the side of the frame.",
+   "yes": "the frame edge cuts through the face or head, so an eye, cheek or half the face is missing",
+   "no": "the whole head is inside the frame, or no person is shown",
+   "expect": "<0.5",
+   "why": "calibrated: cut faces 0.55-0.81 on 8 of 10 frames, whole faces max 0.42 (32 labelled frames, AUC 0.99); one caught frame fails the video"},
+  {"id": "graded", "sample": "grade", "agg": "majority",
+   "ask": "The image has strong contrast with deep black shadows.",
+   "expect": ">=0.42",
+   "why": "calibrated: graded frames min 0.58, grade-removed frames max 0.25 (22 labelled frames, AUC 1.00); majority because a bright screen shot is legitimately low-contrast"},
+  {"id": "no_secrets", "sample": "screens",
+   "ask": "Private information is readable on screen: a password, Wi-Fi network key, email address, phone number, access code or API key.",
+   "expect": "<0.4"}
+ ]
+}
