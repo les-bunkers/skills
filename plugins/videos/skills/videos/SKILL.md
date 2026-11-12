@@ -12,7 +12,7 @@ argument-hint: "[video name or slug]"
 2. A name → `videos.py show <query>` (exact slug, else fuzzy on slug and title; several hits → list them and ask). Read the record it prints: frontmatter = state, body = decisions, notes, log. Read the files listed in `style:` before any stage that cuts or styles.
 3. Pick the stage: the user's verb (« tighten X » → tighten), else the first stage whose status is not `done`/`skip`. Status `review …` = waiting on a human: show what to review (timeline, markers, page) and stop, unless the user is giving that review now → record it under `## Decisions`, then continue.
 4. Load only that stage's skill (table) and the skills or docs it names; run it.
-5. After each stage: `videos.py set <slug> <stage> "<status> <date or what to look at>" --next "<next step>"`. Doubts, skipped items and things to check go in `videos.py note <slug> "<text>"`. Never leave the record stale: the next session starts from it.
+5. After each stage: `videos.py set <slug> <stage> "<status> <date or what to look at>" --next "<next step>"` (master, formats, clips, generate, qc and publish need video CI first: next section). Doubts, skipped items and things to check go in `videos.py note <slug> "<text>"`. Never leave the record stale: the next session starts from it.
 
 ## Stages
 
@@ -34,6 +34,18 @@ argument-hint: "[video name or slug]"
 
 Companion plugins from the same marketplace: `audio-cleanup`, `vertical-clips`, `agent-ears` (breath / filler detection used by tighten). Missing → `/plugin install <name>@les-bunkers`.
 
+## Video CI (mandatory)
+
+Nothing reaches a human's eyes or a platform before video CI: before a review page, a contact sheet, a file path in chat, a status `review`, or a delivery, run `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <stage> [--var hook="…" --var cta="…"]` on every file you are about to show.
+
+- RED: do not show it. Fix the cause, re-render, re-run. Can't fix → tell the human what failed, with the frames, and set the stage `blocked <what>`.
+- AMBER: show it with the flagged frames (`checks/ci/<stage>/<file>_frames/`) and one line per flag. Never call an amber file clean.
+- GREEN: show it. CI covers the mechanical and visual defects; taste, claims and pacing stay with the human.
+- `videos.py set` refuses `review` / `done` on master, formats, clips, generate, qc and publish unless the stage's CI index is fresh (files unchanged since their run) and has no red file. A dropped file leaves the index with `video_ci.py <file> --slug <video> --stage <stage> --forget`; `--skip-ci "<why>"` passes the gate only when the human asked for the file as it is, and the reason is logged.
+- Cost: the tech tier is local and free; the visual tier is a paid API call (~$0.005 per short, at most $0.50 per file). Ask the human once per project for a standing go-ahead, record it in the project's style or house notes, then run CI without asking. Without it: `--no-visual "no go-ahead yet"` (the file is at best amber).
+
+Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md).
+
 ## House rules (every stage)
 
 - Taste lives in the project: a stage that cuts or styles reads the record's `style:` files (edit style, caption look, brand). None → ask once, write the answer into a style file and add it to `style:`.
@@ -46,4 +58,4 @@ Companion plugins from the same marketplace: `audio-cleanup`, `vertical-clips`, 
 - NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's.
 - Review pages for the human run on localhost (`python -m http.server --bind 127.0.0.1 <port>`); stop servers by their PID.
 - Never modify source media. Heavy media (rushes, masters, renders, HyperFrames projects) goes under `media_root`; the project keeps records, cut data, reports and upload-ready finals.
-- Before publishing, check the picture for readable secrets (passwords, Wi-Fi keys, emails, phone numbers, client screens): `/videos:qc` has the procedure.
+- Before publishing, check the picture for readable secrets (passwords, Wi-Fi keys, emails, phone numbers, client screens): video CI scans finals for them, `/videos:qc` has the procedure for screen recordings.

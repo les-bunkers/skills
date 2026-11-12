@@ -1,0 +1,21 @@
+{
+ "about": "Long master (talking head, podcast, course video) before review or delivery: grade applied, faces inside the frame, secrets on screen. No hook or caption checks (masters carry neither); captions burned into a master: add the short pack's caption_off_face. video_ci.py widens every step on long files so a check never takes more than 150 stills.",
+ "samples": {
+  "spread": {"every": 10, "each": true, "res": "medium"},
+  "grade": {"every": 30, "each": true, "res": "low"},
+  "screens": {"every": 3, "each": true, "res": "high"}
+ },
+ "checks": [
+  {"id": "face_in_frame", "sample": "spread",
+   "ask": "The person's head is cropped by the side of the frame.",
+   "yes": "the frame edge cuts through the face or head, so an eye, cheek or half the face is missing",
+   "no": "the whole head is inside the frame, or no person is shown",
+   "expect": "<0.5"},
+  {"id": "graded", "sample": "grade", "agg": "majority",
+   "ask": "The image has strong contrast with deep black shadows.",
+   "expect": ">=0.42"},
+  {"id": "no_secrets", "sample": "screens",
+   "ask": "Private information is readable on screen: a password, Wi-Fi network key, email address, phone number, access code or API key.",
+   "expect": "<0.4"}
+ ]
+}

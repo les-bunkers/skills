@@ -48,6 +48,8 @@ Un `videos.json` à la racine de ton projet (ou d'un dossier qui regroupe les es
 
 Les agents vérifient les rendus avec `scripts/decide.py` : des questions oui/non, à choix ou à échelle sur des images, des segments ou l'audio d'une vidéo, avec des probabilités calibrées en une seconde environ (API Gemini Decisions). Après une retouche, il sert de test unitaire (accroche présente, pas de sous-titre sur un visage, visage dans le cadre, étalonnage appliqué, aucun mot de passe à l'écran); il écarte aussi les prises ratées et les images de couverture aux yeux fermés, et `calibrate` choisit la formulation et le seuil d'une nouvelle vérification à partir d'exemples étiquetés. Détails, mesures et limites (en anglais) : [decide](plugins/videos/references/decide.md).
 
+Par-dessus, il y a la CI vidéo (`scripts/video_ci.py`) : chaque rendu qu'un agent s'apprête à te montrer ou à livrer passe par un volet local gratuit (codec, niveau sonore, passages noirs, figés ou silencieux) et par les vérifications visuelles, puis revient vert, ambre (montré avec les images signalées) ou rouge (corrigé avant que tu le voies). Elle est obligatoire : `videos.py` refuse de mettre master, formats, clips, qc ou publish en `review` ou `done` tant que la CI d'un fichier manque, est périmée ou rouge. Détails (en anglais) : [ci](plugins/videos/references/ci.md).
+
 ## Ce qu'il faut
 
 - Claude Code avec Bash, Python 3.11+, [uv](https://docs.astral.sh/uv/) et ffmpeg dans le PATH.

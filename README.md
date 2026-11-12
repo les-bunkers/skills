@@ -48,6 +48,8 @@ Put a `videos.json` at the root of your project (or of a folder holding several 
 
 Agents check renders with `scripts/decide.py`: yes/no, choice and score questions on stills, spans or audio of a video, answered with calibrated probabilities in about a second (Gemini Decisions API). After an edit it works like a unit test (hook present, no caption on a face, face inside the frame, grade applied, no password on screen); it also drops bad takes and blinking cover frames, and `calibrate` picks the wording and threshold of a new check on labelled examples. Details, measurements and limits: [decide](plugins/videos/references/decide.md).
 
+On top of it sits video CI (`scripts/video_ci.py`): every render an agent is about to show you or ship goes through a free local tier (codec, loudness, black, frozen and silent stretches) and the visual checks, and comes back green, amber (shown with the flagged frames) or red (fixed before you see it). It is mandatory: `videos.py` refuses to put master, formats, clips, qc or publish in `review` or `done` while a file's CI is missing, stale or red. Details: [ci](plugins/videos/references/ci.md).
+
 ## What it assumes
 
 - Claude Code with Bash, Python 3.11+, [uv](https://docs.astral.sh/uv/) and ffmpeg on PATH.

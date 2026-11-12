@@ -7,6 +7,8 @@
 One record per video: <project>/.agents/videos/<slug>/video.md (flat frontmatter, one key per stage, then
 ## Decisions / ## Notes / ## Log). Published files: <project>/artifacts/videos/<slug>/release.md + index.md.
 Spec: ${CLAUDE_PLUGIN_ROOT}/references/records.md
+Video CI gate: `set` to review/done on master, formats, clips, generate, qc or publish needs the files tested by
+video_ci.py --slug --stage to be unchanged since and not red (references/ci.md); --skip-ci "<why>" passes it, logged.
 
 Project root = $VIDEOS_ROOT, else the nearest folder at or above the current one holding videos.json, else the
 current folder. videos.json (optional; videos.local.json beside it overrides it, keep machine paths there):
@@ -19,7 +21,7 @@ $VIDEOS_MEDIA_ROOT overrides media_root.
   python videos.py board [--ws W] [--wide] [--all]
   python videos.py show <query>
   python videos.py new <slug> --title T --kind K [--ws W] [--campaign C] [--content IDS] [--style P] [--code P] [--media P] [--talent N] [--next N]
-  python videos.py set <slug> <stage|key> "<value>" [--next "<next step>"]
+  python videos.py set <slug> <stage|key> "<value>" [--next "<next step>"] [--skip-ci "<why>"]
   python videos.py note <slug> "<text>"
   python videos.py release <slug>
 """
@@ -224,6 +226,11 @@ def cmd_show(a):
     vm, m, _, _ = hits[0]
     print(f"record: {rel(vm)}")
     print(f"current stage: {current(m)}")
+    for stage in CI_GATED:
+        idx = vm.parent / "checks" / "ci" / f"{stage}.json"
+        if idx.is_file():
+            ok, msg = ci_gate(vm.parent, stage)
+            print(f"CI {stage}: {msg}")
     print(vm.read_text(encoding="utf-8"))
 
 
@@ -260,16 +267,62 @@ def cmd_new(a):
     print(f"created {rel(d / 'video.md')}" + (f"\nmedia: {meta['media']}" if "media" in meta else ""))
 
 
+CI_GATED = ("master", "formats", "clips", "generate", "qc", "publish")  # review/done here = a human sees or ships files
+CI_FINALS = ("master", "formats", "clips")  # what qc and publish answer for
+
+
+def ci_gate(rec_dir, stage):
+    """Video CI as a required check: files tested by video_ci.py --slug --stage, unchanged since, none red.
+    -> (ok, one-line summary)"""
+    ci = rec_dir / "checks" / "ci"
+    names = [stage] if stage not in ("qc", "publish") else [s for s in (*CI_FINALS, "qc") if (ci / f"{s}.json").is_file()]
+    entries = []
+    for n in names:
+        p = ci / f"{n}.json"
+        if p.is_file():
+            entries += json.loads(p.read_text(encoding="utf-8")).get("files", [])
+    if not entries:
+        return False, (f"no CI report for {stage}: run video_ci.py <files> --slug <slug> --stage "
+                       f"{stage if stage not in ('qc', 'publish') else '<master|formats|clips>'} first")
+    bad, count = [], {"green": 0, "amber": 0, "red": 0}
+    for e in entries:
+        p = Path(e["file"])
+        count[e.get("verdict", "red")] = count.get(e.get("verdict", "red"), 0) + 1
+        if not p.is_file():
+            bad.append(f"{p.name}: file gone (re-render, or video_ci.py --forget)")
+            continue
+        st = p.stat()
+        if st.st_size != e.get("size") or st.st_mtime_ns != e.get("mtime_ns"):
+            bad.append(f"{p.name}: changed after its CI run (run video_ci.py on it again)")
+        elif e.get("verdict") == "red":
+            bad.append(f"{p.name}: RED: {e.get('why', '')}")
+    summary = f"{count['green']} green, {count['amber']} amber, {count['red']} red"
+    if bad:
+        return False, summary + "\n  " + "\n  ".join(bad)
+    return True, summary + (f" (amber: show the flagged frames, {sum(1 for e in entries if e.get('verdict') == 'amber')} file(s))"
+                            if count["amber"] else "")
+
+
 def cmd_set(a):
     vm, _, _, _ = one(a.slug)
     if a.key in STAGES and word(a.value) not in STATUS:
         sys.exit(f"a stage value starts with one of: {', '.join(STATUS)} (got '{a.value}')")
+    ci_note = ""
+    if a.key in CI_GATED and word(a.value) in ("review", "done"):
+        ok, msg = ci_gate(vm.parent, a.key)
+        if a.skip_ci:
+            ci_note = f" (CI skipped: {a.skip_ci}; {msg.splitlines()[0]})"
+        elif not ok:
+            sys.exit(f"video CI blocks {a.key} = {word(a.value)}: {msg}\n"
+                     f"Fix and re-run video_ci.py, or pass --skip-ci \"<why>\" (logged in the record).")
+        else:
+            ci_note = f" (CI: {msg})"
     meta, body = parse(vm)
     meta[a.key] = a.value
     if a.next is not None:
         meta["next"] = a.next
     meta["updated"] = TODAY
-    line = f"- {TODAY} {a.key}: {a.value}" + (f" → next: {a.next}" if a.next else "")
+    line = f"- {TODAY} {a.key}: {a.value}{ci_note}" + (f" → next: {a.next}" if a.next else "")
     body = body.rstrip("\n") + "\n" + line + "\n" if "## Log" in body else body.rstrip("\n") + f"\n\n## Log\n{line}\n"
     vm.write_text(dump(meta, body), encoding="utf-8")
     print(f"{meta.get('slug')}: {a.key} = {a.value}" + (f"; next = {a.next}" if a.next else ""))
@@ -342,6 +395,7 @@ def main():
     t.add_argument("key")
     t.add_argument("value")
     t.add_argument("--next")
+    t.add_argument("--skip-ci", metavar="WHY", help="pass the video CI gate anyway; the reason goes in the log")
     o = sub.add_parser("note", help="add a dated line under ## Notes")
     o.add_argument("slug")
     o.add_argument("text")

@@ -15,7 +15,8 @@ argument-hint: "[video name]"
 5. Check the file: `uv run "$S/finals_check.py" "<media folder>/masters/<name>-master.mp4" --cuts cut/final.cuts.json --project cut/edit.json --ref "<mastered track wav>" --json checks/master.json`.
    Pass = video stream present and frames = the timeline's length; −14 LUFS ± 0.5 and true peak ≤ −1.0 dBTP on the encoded file (ebur128; loudnorm reads ~0.3 LU low on a silent tail); content: render = 1.0 × the mastered track at lag 0 (a second track mixed in or a shifted edit fails). No mastered track yet → leave out `--ref` and add `--no-loudness`: the render is then compared with the sound rebuilt from the cut list and the sources.
    Two renders that must line up (track A vs track B): `uv run "$S/sync_check.py" a.wav b.wav` → every window lag 0.
-6. `videos.py set <slug> master "done <date> <path> -14.0/-1.9" --next "formats"` (the measured values). A failed check → `blocked <what failed>` and tell the human.
+6. Video CI on the master: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" "<media folder>/masters/<name>-master.mp4" --slug <slug> --stage master` (spec, loudness, black / frozen / silent stretches, face framing, grade, secrets; at most 150 stills per check). RED → fix before anyone sees it.
+7. `videos.py set <slug> master "done <date> <path> -14.0/-1.9" --next "formats"` (the measured values; refused without fresh, non-red CI). A failed check → `blocked <what failed>` and tell the human.
 
 ## Rules
 

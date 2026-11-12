@@ -8,6 +8,8 @@ argument-hint: "[video name or file]"
 
 ## Which checker
 
+Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <master|formats|clips>` (spec, loudness, black / frozen / silent stretches, then hook, closing text, caption on a face, face framing, grade, secrets). Its indexes are what `qc done` checks ([ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md)). The rows below are the deeper checks per stage.
+
 | File | Check | Pass |
 |---|---|---|
 | any shipped mp4 | `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/loudness.py" measure <file>` | −14.0 ±0.5 LUFS, true peak ≤ −1.0 dBTP on the AAC |
@@ -17,8 +19,6 @@ argument-hint: "[video name or file]"
 | tighten joins | the tighten stage's join check (`/videos:tighten`) | no join louder than the documented limit over the room floor |
 | HyperFrames project | `hyperframes check --json` | `ok: true` |
 | vertical clip batch | `/vertical-clips` QC report | prints problems only |
-| finished short, each format | `decide.py run short --media <file> --var hook="<hook text>" --var cta="<closing text>" --json checks/decide-<fmt>.json` | exit 0; fail or unsure → open the saved frames in `checks/decide-<fmt>_frames/` |
-| any file before publish | `decide.py run secrets --media <file> --json checks/secrets.json` | exit 0 (see below) |
 | a fix you just made | `decide.py ask <new> --baseline <old> --at <t> "<what should have changed>"` | the change is seen, nothing else moved |
 
 Black and frozen frames:
@@ -39,4 +39,4 @@ Screen recordings, switcher outputs and monitors leak credentials. Run `decide.p
 
 ## Record
 
-`videos.py set <slug> qc "done <date>"` or `"blocked <what failed>"`.
+`videos.py set <slug> qc "done <date>"` (refused while a final's CI is stale or red) or `"blocked <what failed>"`.
