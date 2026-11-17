@@ -6,8 +6,15 @@
 
 Two tiers, one verdict per file:
   tech   (local, free): stream spec, A/V length, loudness, black frames, frozen picture, dead air
-  visual (decide.py, paid, ~$0.005 per short): the profile's decide pack (hook, CTA, caption on a face, framing,
-         grade, secrets on screen; stray text and wipes for generated media)
+  visual (decide.py, paid, ~$0.005-0.02 per short): the profile's decide pack (hook, CTA, caption on a face, framing,
+         grade, secrets on screen, text colliding or cut by the frame edge right after each scene change, overlay
+         text too small for a phone; stray text and wipes for generated media)
+Transitions: the tech pass also finds scene changes (ffmpeg scdet); --events adds known ones (graphic in/out times from
+a spec). The pack's `transitions` sample looks at stills 0.1 s and 0.6 s after each one, where regular sampling misses
+a broken entrance or a label that never left.
+Provenance: --input / --manifest list the files a render was built from (spec, master, LUT, template, project dir);
+their size + mtime (folders: a fingerprint of every file) are stored with the CI result, and the videos.py gate refuses
+review/done once one of them changed: the final is stale even though the file itself did not move.
 Verdict: RED = a blocking check failed (do not show the file, fix it), AMBER = something a human should look at (show
 the file WITH the flagged frames and say what was flagged), GREEN = nothing found.
 
@@ -28,6 +35,7 @@ usage:
   uv run video_ci.py takes/sh010.t*.mp4 --profile generated --slug gv01 --stage generate
   uv run video_ci.py renders/rough_v1.mp4 --profile preview
   uv run video_ci.py takes/sh010.t02.mp4 --slug gv01 --stage generate --forget
+  uv run video_ci.py final/x_9x16.mp4 --slug launch-03 --stage formats --var hook="..." --events specs/x.json --input row.json --input formats/9x16
 Exit: 0 green, 2 amber, 1 red, 3 could not run.
 Reference: ${CLAUDE_PLUGIN_ROOT}/references/ci.md
 """
@@ -51,16 +59,22 @@ FFMPEG = os.environ.get("FFMPEG") or shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE = os.environ.get("FFPROBE") or shutil.which("ffprobe") or "ffprobe"
 EDGE_S = 0.5            # black / freeze / silence this close to the start or end = intended fade, ignored
 VISUAL_CAP = 150        # stills per check at most: long masters get a wider step instead of a bigger bill
+SCENE_THRESHOLD = 6.0   # scdet score (0-100) for a scene change; 6 found layout switches, cuts and graphic entrances on
+                        # 3-min teaching videos (38 in 167 s) without firing on eased push-ins
+MAX_EVENTS = 60         # transitions sampled per file at most (strongest scene changes first; --events always kept)
+EVENT_OFFSETS = (0.1, 0.6)  # stills after each event: mid-transition (old and new text both on screen) and landed
+MERGE_S = 0.4           # events closer than this are one transition
 CI_STAGES = ("master", "formats", "clips", "generate", "qc", "publish")
 
 PROFILES = {
     # spec: codec/pix/audio requirements; level: "fail" blocks (red), "unsure" flags (amber), None skips the check
     "short": {"codecs": ("h264", "hevc"), "pix": ("yuv420p",), "audio": "aac", "spec": "fail", "lufs": "fail",
-              "black": "fail", "freeze": "unsure", "silence": "unsure", "pack": "short"},
+              "black": "fail", "freeze": "unsure", "silence": "unsure", "pack": "short", "scenes": True},
     "clip": {"codecs": ("h264", "hevc"), "pix": ("yuv420p",), "audio": "aac", "spec": "fail", "lufs": "fail",
-             "black": "fail", "freeze": "unsure", "silence": "unsure", "pack": "short"},
+             "black": "fail", "freeze": "unsure", "silence": "unsure", "pack": "short", "scenes": True},
     "master": {"codecs": ("h264", "hevc", "prores", "dnxhd"), "pix": None, "audio": "any", "spec": "fail", "lufs": "fail",
-               "black": "unsure", "freeze": "unsure", "silence": "unsure", "pack": "master"},
+               "black": "unsure", "freeze": "unsure", "silence": "unsure", "pack": "master",
+               "scenes": True},
     "generated": {"codecs": None, "pix": None, "audio": None, "spec": "unsure", "lufs": None,
                   "black": "unsure", "freeze": None, "silence": None, "pack": "generated"},
     "preview": {"codecs": None, "pix": None, "audio": "any", "spec": "unsure", "lufs": "unsure",
@@ -156,12 +170,15 @@ def tech_checks(path, info, prof):
             out.append(check("loudness", "unsure", f"could not measure ({e})"))
     # black / freeze / silence in one decode
     wants = [k for k in ("black", "freeze", "silence") if P[k]]
-    if wants and v is not None:
+    scenes = []
+    if (wants or P.get("scenes")) and v is not None:
         vf = ["scale=320:-2"]
         if P["black"]:
             vf.append("blackdetect=d=0.2:pix_th=0.10")
         if P["freeze"]:
             vf.append("freezedetect=n=0.003:d=1.5")
+        if P.get("scenes"):
+            vf.append(f"scdet=threshold={SCENE_THRESHOLD}")
         cmd = [FFMPEG, "-hide_banner", "-nostats", "-hwaccel", "auto", "-threads", "0", "-i", str(path), "-vf", ",".join(vf)]
         if P["silence"] and a is not None:
             cmd += ["-af", "silencedetect=n=-50dB:d=1.5"]
@@ -170,6 +187,10 @@ def tech_checks(path, info, prof):
 
         def interior(spans):
             return [(s, e) for s, e in spans if s > EDGE_S and e < dur - EDGE_S]
+
+        if P.get("scenes"):
+            scenes = [(float(t), float(sc)) for sc, t in
+                      re.findall(r"lavfi\.scd\.score: ([\d.]+), lavfi\.scd\.time: ([\d.]+)", log)]
 
         if P["black"]:
             spans = [(float(s), float(e)) for s, e in re.findall(r"black_start:([\d.]+) black_end:([\d.]+)", log)]
@@ -191,15 +212,48 @@ def tech_checks(path, info, prof):
             out.append(check("dead_air", P["silence"] if bad else "pass",
                              ", ".join(f"{s:.2f}-{e:.2f} s" for s, e in bad) or "no silence over 1.5 s",
                              at=[round(s, 2) for s, _ in bad]))
-    return out, dur
+    return out, dur, scenes
+
+
+def load_events(paths):
+    """--events files -> seconds. A file holds a list of seconds, a list of {t|start|time, dur|duration} (graphics: the
+    exit at t+dur counts too), or an object whose "events" / "graphics" / "segments" list is such a list."""
+    out = []
+    for p in paths or []:
+        data = json.loads(Path(p).read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            data = next((data[k] for k in ("events", "graphics", "transitions", "segments") if isinstance(data.get(k), list)), [])
+        for e in data:
+            if isinstance(e, (int, float)):
+                out.append(float(e))
+            elif isinstance(e, dict):
+                t = next((e[k] for k in ("t", "start", "time", "rec_s") if isinstance(e.get(k), (int, float))), None)
+                if t is None:
+                    continue
+                out.append(float(t))
+                d = next((e[k] for k in ("dur", "duration") if isinstance(e.get(k), (int, float))), None)
+                if d:
+                    out.append(float(t) + float(d))
+    return out
+
+
+def transition_times(scenes, events, dur):
+    """scene changes (t, score) + known events -> still times after each (strongest first, capped, merged)."""
+    picked = []
+    for t in [*sorted(events), *[t for t, _ in sorted(scenes, key=lambda x: -x[1])]]:
+        if EDGE_S < t < dur - EDGE_S and all(abs(t - p) >= MERGE_S for p in picked) and len(picked) < MAX_EVENTS:
+            picked.append(t)
+    return sorted(picked), sorted({round(min(t + o, dur - 0.05), 2) for t in picked for o in EVENT_OFFSETS})
 
 
 # ---------------------------------------------------------------- visual tier
 
 
-def visual_checks(path, prof, dur, cli_vars, var_files, max_cost, frames_dir, use_cache=True):
+def visual_checks(path, prof, dur, cli_vars, var_files, max_cost, frames_dir, use_cache=True, still_times=None):
     pack = PROFILES[prof]["pack"]
     spec = D.load_checks(pack)
+    if "transitions" in spec.get("samples", {}):
+        spec["samples"]["transitions"]["at"] = list(still_times or [])  # empty = the checks report "no times" (info)
     for name, smp in spec.get("samples", {}).items():  # long files: widen the step, keep the bill flat
         if smp.get("every") and dur and dur / float(smp["every"]) > VISUAL_CAP:
             smp["every"] = round(dur / VISUAL_CAP, 2)
@@ -229,8 +283,14 @@ def visual_checks(path, prof, dur, cli_vars, var_files, max_cost, frames_dir, us
         if r["verdict"] == "error":
             err = next((p.get("error") for p in r["per_input"] if p.get("error")), "")
             detail = f"could not run: {err[:160]}"
+        if r.get("note"):
+            detail = r["note"]
         frames = sorted({f for p in r["per_input"] if p.get("verdict") in ("fail", "unsure") for f in p.get("frames", [])})
-        out.append(check(r["id"], r["verdict"], detail.strip() or r["verdict"], tier="visual", ask=r.get("ask"),
+        verdict = r["verdict"]
+        soft = next((c.get("soft") for c in spec["checks"] if c["id"] == r["id"]), False)
+        if soft and verdict == "fail":  # taste-adjacent checks flag for the human, never block
+            verdict, detail = "unsure", f"{detail.strip()} (soft check: shown, not blocking)"
+        out.append(check(r["id"], verdict, detail.strip() or verdict, tier="visual", ask=r.get("ask"),
                          expect=r.get("expect"), worst=w, frames=frames[:12]))
     return out, rep["usage"]
 
@@ -264,7 +324,12 @@ def ci_file(path, a, cli_vars, var_files, out_dir):
     t0 = time.time()
     info = probe(path)
     prof = a.profile if a.profile != "auto" else auto_profile(path, info)
-    checks, dur = tech_checks(path, info, prof)
+    checks, dur, scenes = tech_checks(path, info, prof)
+    events = load_events(a.events)
+    picked, still_times = transition_times(scenes, events, dur) if (scenes or events) else ([], [])
+    if PROFILES[prof].get("scenes") or events:
+        checks.append(check("transitions", "info", f"{len(scenes)} scene changes found, {len(events)} given; "
+                            f"{len(picked)} sampled (0.1 s and 0.6 s after each)", at=[round(t, 2) for t in picked]))
     usage = {}
     stem = Path(path).stem
     frames_dir = out_dir / f"{stem}_frames"
@@ -272,22 +337,43 @@ def ci_file(path, a, cli_vars, var_files, out_dir):
         checks.append(check("visual", "unsure", f"skipped by the agent: {a.no_visual}", tier="visual"))
     else:
         try:
-            vchecks, usage = visual_checks(path, prof, dur, cli_vars, var_files, a.max_cost, frames_dir, not a.no_cache)
+            vchecks, usage = visual_checks(path, prof, dur, cli_vars, var_files, a.max_cost, frames_dir, not a.no_cache,
+                                           still_times)
             checks += vchecks
         except D.DecideError as e:
             checks.append(check("visual", "fail", f"visual tier could not run: {e} (fix it, or --no-visual \"<why>\")", tier="visual"))
+    inputs = input_prints(a)
     verdicts = [c["verdict"] for c in checks]
     verdict = "red" if ("fail" in verdicts or "error" in verdicts) else "amber" if "unsure" in verdicts else "green"
     st = Path(path).stat()
     report = {"file": str(Path(path).resolve()), "size": st.st_size, "mtime_ns": st.st_mtime_ns, "profile": prof,
               "verdict": verdict, "ran_at": time.strftime("%Y-%m-%d %H:%M:%S"), "seconds": round(time.time() - t0, 1),
-              "usage": usage, "vars": cli_vars, "checks": checks,
+              "usage": usage, "vars": cli_vars, "inputs": inputs, "checks": checks,
               "frames_dir": str(frames_dir) if frames_dir.exists() else None}
     out_dir.mkdir(parents=True, exist_ok=True)
     rpath = out_dir / f"{stem}.json"
     rpath.write_text(json.dumps(report, ensure_ascii=False, indent=1), encoding="utf-8")
     report["report"] = str(rpath)
     return report
+
+
+def input_prints(a):
+    """--input paths + --manifest inputs -> [{path, size, mtime_ns} | {path, files, fingerprint}] (videos.fingerprint)."""
+    import videos as V
+    paths = list(a.input or [])
+    for m in a.manifest or []:
+        data = json.loads(Path(m).read_text(encoding="utf-8"))
+        base = Path(m).resolve().parent
+        for p in (data.get("inputs", []) if isinstance(data, dict) else data):
+            p = p.get("path") if isinstance(p, dict) else p
+            paths.append(str(p if Path(p).is_absolute() else base / p))
+    out = []
+    for p in paths:
+        fp = V.fingerprint(p)
+        if fp is None:
+            raise D.DecideError(f"--input not found: {p}")
+        out.append(fp)
+    return out
 
 
 def print_report(r):
@@ -297,6 +383,8 @@ def print_report(r):
     for c in r["checks"]:
         mark = {"pass": "pass  ", "fail": "FAIL  ", "unsure": "LOOK  ", "error": "ERROR ", "info": "info  "}.get(c["verdict"], c["verdict"])
         print(f"  {mark}{c['tier']:<6} {c['id']:<17} {c['detail']}")
+    if r.get("inputs"):
+        print(f"  inputs: {len(r['inputs'])} recorded (the gate refuses review/done once one changes)")
     if r.get("frames_dir"):
         print(f"  frames: {r['frames_dir']}")
     print(f"  report: {r['report']}")
@@ -316,6 +404,12 @@ def main(argv=None):
     ap.add_argument("--no-visual", metavar="WHY", help="run the tech tier only; the reason is recorded (verdict at best amber)")
     ap.add_argument("--no-cache", action="store_true")
     ap.add_argument("--forget", action="store_true", help="remove the files from the stage index (rejected take, dropped format)")
+    ap.add_argument("--events", action="append", help="JSON of known transition times: seconds, or {t|start, dur} items "
+                    "(graphics specs, cut lists); sampled with the scene changes")
+    ap.add_argument("--input", action="append", help="a file or folder this render was built from (repeat); the gate "
+                    "refuses review/done once it changes")
+    ap.add_argument("--manifest", action="append", help="JSON listing inputs: {\"inputs\": [paths]} or [paths], relative "
+                    "to the manifest")
     a = ap.parse_args(argv)
     if a.slug and not a.stage:
         ap.error("--slug needs --stage")
@@ -353,7 +447,7 @@ def main(argv=None):
             look = "; ".join(f"{c['id']}" for c in r["checks"] if c["verdict"] == "unsure")
             idx = update_index(rec, a.stage, {"file": r["file"], "size": r["size"], "mtime_ns": r["mtime_ns"],
                                                "verdict": r["verdict"], "profile": r["profile"], "ran_at": r["ran_at"],
-                                               "report": r["report"], "why": why, "look": look})
+                                               "report": r["report"], "why": why, "look": look, "inputs": r["inputs"]})
             print(f"  index: {idx}")
         seen.add(r["verdict"])
         tally[r["verdict"]] = tally.get(r["verdict"], 0) + 1

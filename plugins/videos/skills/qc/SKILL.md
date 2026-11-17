@@ -8,7 +8,7 @@ argument-hint: "[video name or file]"
 
 ## Which checker
 
-Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <master|formats|clips>` (spec, loudness, black / frozen / silent stretches, then hook, closing text, caption on a face, face framing, grade, secrets). Its indexes are what `qc done` checks ([ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md)). The rows below are the deeper checks per stage.
+Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <master|formats|clips>` (spec, loudness, black / frozen / silent stretches, then hook, closing text, caption on a face, face framing, grade, secrets, text colliding or cut by the frame edge after each transition, overlay text too small for a phone; `--events` adds graphic in/out times, `--input` makes the gate refuse a final whose spec or project changed). Its indexes are what `qc done` checks ([ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md)). The rows below are the deeper checks per stage.
 
 | File | Check | Pass |
 |---|---|---|
@@ -20,6 +20,12 @@ Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts
 | HyperFrames project | `hyperframes check --json` | `ok: true` |
 | vertical clip batch | `/vertical-clips` QC report | prints problems only |
 | a fix you just made | `decide.py ask <new> --baseline <old> --at <t> "<what should have changed>"` | the change is seen, nothing else moved |
+| HyperFrames project, transient overlaps | `hyperframes check --at-transitions --json` | no overlap or overflow at tween boundaries |
+| on-screen text, before any render (HyperFrames project, graphics spec) | `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/claims_check.py" <project dir or spec.json> --slug <slug> --captions cap-line [--words <master>.words.json]` | exit 0; amber lines shown to the human; red = change the text or get the claim approved into the claims file, then rebuild |
+| hook, CTA, ad-variant strings | `claims_check.py --slug <slug> --text "<hook>" --text "<cta>"` | same |
+| plan or spec mixing notes and screen text | `claims_check.py <spec.json> --slug <slug> --keys hook,label,text` | same |
+
+Claims file = one `claims.json` per workspace (approved claims with their source, banned phrases): [claims](${CLAUDE_PLUGIN_ROOT}/references/claims.md). Never add an approval without the place the human approved it.
 
 Black and frozen frames:
 

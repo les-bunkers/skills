@@ -1,38 +1,120 @@
 {
- "about": "Finished short (any aspect) with burned-in captions: hook, call to action, caption placement, face framing, grade, secrets on screen. Vars: hook (headline text), cta (closing text, e.g. the URL). Wordings and thresholds calibrated with `decide.py calibrate` on labelled frames of a 9:16 talking-head short and mutated copies (caption moved onto the face, reframe off by 250 px, grade removed, Wi-Fi password on screen); see references/decide.md. A 48 s short = ~45 requests, ~45k tokens, ~$0.005, ~5 s.",
+ "about": "Finished short (any aspect) with burned-in captions: hook, call to action, caption placement, face framing, grade, secrets on screen; text colliding or cut by the frame edge right after each scene change (video_ci.py fills the transitions sample from ffmpeg scdet and --events; run alone with no times = info); overlay text too small for a phone (stills shrunk to 360 px, soft). Vars: hook (headline text), cta (closing text, e.g. the URL). Wordings and thresholds calibrated with `decide.py calibrate` on labelled frames of a 9:16 talking-head short and mutated copies (caption moved onto the face, reframe off by 250 px, grade removed, Wi-Fi password on screen); see references/decide.md. A 48 s short = ~45 requests, ~45k tokens, ~$0.005, ~5 s.",
  "min_confidence": 0.6,
  "samples": {
-  "opening": {"at": [0.4, 1.2], "res": "high"},
-  "closing": {"at": [-1.2, -0.4], "res": "high"},
-  "spread": {"every": 3, "each": true, "res": "medium"},
-  "grade": {"every": 8, "each": true, "res": "low"},
-  "screens": {"every": 2, "each": true, "res": "high"}
+  "opening": {
+   "at": [
+    0.4,
+    1.2
+   ],
+   "res": "high"
+  },
+  "closing": {
+   "at": [
+    -1.2,
+    -0.4
+   ],
+   "res": "high"
+  },
+  "spread": {
+   "every": 3,
+   "each": true,
+   "res": "medium"
+  },
+  "grade": {
+   "every": 8,
+   "each": true,
+   "res": "low"
+  },
+  "screens": {
+   "every": 2,
+   "each": true,
+   "res": "high"
+  },
+  "transitions": {
+   "at": [],
+   "each": true,
+   "res": "high"
+  },
+  "phone": {
+   "every": 4,
+   "each": true,
+   "res": "high",
+   "px": 360
+  }
  },
  "checks": [
-  {"id": "hook_text", "sample": "opening",
+  {
+   "id": "hook_text",
+   "sample": "opening",
    "ask": "The large headline text on screen reads «{hook}» (line breaks, letter case and colours do not matter).",
-   "expect": ">=0.6"},
-  {"id": "cta_text", "sample": "closing",
+   "expect": ">=0.6"
+  },
+  {
+   "id": "cta_text",
+   "sample": "closing",
    "ask": "The text «{cta}» is visible on screen.",
-   "expect": ">=0.6"},
-  {"id": "caption_off_face", "sample": "spread",
+   "expect": ">=0.6"
+  },
+  {
+   "id": "caption_off_face",
+   "sample": "spread",
    "ask": "A line of on-screen text is placed over the middle of the speaker's face, hiding part of it.",
    "yes": "letters sit directly on the face (eyes, nose, mouth or beard)",
    "no": "all text is below the chin, above the head, or there is no face",
    "expect": "<0.4",
-   "why": "calibrated per video (worst frame decides): clean shorts peak at 0.28, a caption moved onto the face peaks at 0.76; per frame AUC 1.00 on 31 labelled frames"},
-  {"id": "face_in_frame", "sample": "spread",
+   "why": "calibrated per video (worst frame decides): clean shorts peak at 0.28, a caption moved onto the face peaks at 0.76; per frame AUC 1.00 on 31 labelled frames"
+  },
+  {
+   "id": "face_in_frame",
+   "sample": "spread",
    "ask": "The person's head is cropped by the side of the frame.",
    "yes": "the frame edge cuts through the face or head, so an eye, cheek or half the face is missing",
    "no": "the whole head is inside the frame, or no person is shown",
    "expect": "<0.5",
-   "why": "calibrated: cut faces 0.55-0.81 on 8 of 10 frames, whole faces max 0.42 (32 labelled frames, AUC 0.99); one caught frame fails the video"},
-  {"id": "graded", "sample": "grade", "agg": "majority",
+   "why": "calibrated: cut faces 0.55-0.81 on 8 of 10 frames, whole faces max 0.42 (32 labelled frames, AUC 0.99); one caught frame fails the video"
+  },
+  {
+   "id": "graded",
+   "sample": "grade",
+   "agg": "majority",
    "ask": "The image has strong contrast with deep black shadows.",
    "expect": ">=0.42",
-   "why": "calibrated: graded frames min 0.58, grade-removed frames max 0.25 (22 labelled frames, AUC 1.00); majority because a bright screen shot is legitimately low-contrast"},
-  {"id": "no_secrets", "sample": "screens",
+   "why": "calibrated: graded frames min 0.58, grade-removed frames max 0.25 (22 labelled frames, AUC 1.00); majority because a bright screen shot is legitimately low-contrast"
+  },
+  {
+   "id": "no_secrets",
+   "sample": "screens",
    "ask": "Private information is readable on screen: a password, Wi-Fi network key, email address, phone number, access code or API key.",
-   "expect": "<0.4"}
+   "expect": "<0.4"
+  },
+  {
+   "id": "text_collision",
+   "sample": "transitions",
+   "ask": "Two lines of overlay text sit on top of each other and collide.",
+   "yes": "letters of one text line are drawn over letters of another text line, even faintly",
+   "no": "every text line has its own clear space; no letters cross other letters",
+   "expect": "<0.67",
+   "why": "calibrated on 120 stills taken just after scene changes of 6 shipped renders (9:16 + 16:9) + mutants: two captions overlapping (one at 55 % opacity = crossfade) 0.77-0.97, clean frames max 0.57 (a prompter screen full of text); AUC 1.00"
+  },
+  {
+   "id": "text_cut_off",
+   "sample": "transitions",
+   "ask": "The edge of the video frame cuts through the letters of a caption or title.",
+   "yes": "a caption or title line starts or ends outside the frame, its letters sliced by the outer border of the video",
+   "no": "all captions and titles sit fully inside the video frame; text clipped by a software window, photo or document border does not count",
+   "expect": "<0.44",
+   "band": 0.06,
+   "why": "calibrated on the same 120 stills: caption pushed past the left or right edge 0.39-0.9 (mean 0.62), clean max 0.42 (prompter text clipped by its own window); AUC 1.00, borderline frames land amber"
+  },
+  {
+   "id": "phone_small_text",
+   "sample": "phone",
+   "soft": true,
+   "ask": "There is overlay text in a small font, much smaller than the main captions.",
+   "expect": "<0.51",
+   "band": 0.05,
+   "why": "frames shrunk to 360 px wide (what a phone shows): 24-28 px labels on a 1080 frame and a real overlay with tiny labels 0.52-0.97, frames with only captions or screen recordings max 0.50; AUC 1.00 on 90 stills. 'Too small to read' wordings did not separate (AUC 0.75): the model reads 9 px text. Soft: a fail shows as amber, never blocks"
+  }
  ]
 }

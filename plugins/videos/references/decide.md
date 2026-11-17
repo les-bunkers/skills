@@ -62,6 +62,7 @@ A sample says what the questions look at. Times in seconds; negative = from the 
 | `window` (+ `hop`) | split the span into clips, one request each |
 | `audio: true` | audio of the span only |
 | `res` | `low` / `medium` / `high` / `ultra_high` (stills only); stills default `high`, video `low` |
+| `px` | stills shrunk to this short side before sending (`360` = what a phone shows of a 9:16 or 16:9 frame); CLI `--px` |
 | `label`, `context` | text before / after the media (expected text, transcript, rules) |
 | `with` | reference files placed first: `["ref.png:Reference sheet"]` or `[{"file", "label", "at"}]` |
 | `compare: true` | input = "Before:" baseline + "After:" media at the same times (`--baseline`) |
@@ -94,7 +95,7 @@ Video is sampled by the API at about 1 frame per second, so anything frame-accur
 - `expect`: yes/no → `yes`, `no`, `>=0.6`, `<0.4`; choice → `id`, `a|b`, `!id`; score → `>=2`. No `expect` = information only.
 - Verdicts: a yes/no or score within `band` of its threshold (default 0.08, score 0.25) is `unsure`; a choice under `min_confidence` (default 0.6) is `unsure`. `agg` over `each` inputs: `all` (default: one failing frame fails the check), `any`, `majority`.
 - `{name}` placeholders come from `vars`, `--var name=value`, `--vars name=file.json` (nested keys → `{name.key}`). A missing var stops the run.
-- `extends: "<pack>"` merges a pack by check id. Packs: `short` (finished short: hook, CTA, caption off the face, face framing, grade, secrets), `secrets` (screen leaks), `generated` (AI stills and takes: stray text, wipes, hands).
+- `extends: "<pack>"` merges a pack by check id. Packs: `short` (finished short: hook, CTA, caption off the face, face framing, grade, secrets, text colliding or cut off after transitions, overlay text too small for a phone), `secrets` (screen leaks), `generated` (AI stills and takes: stray text, wipes, hands).
 - `run --json out.json` writes the report and copies the stills behind every fail or unsure answer to `out_frames/`: a fail alone tells the human nothing.
 
 ## Calibrate before you trust a threshold
@@ -110,6 +111,7 @@ Probabilities are calibrated, but each question's best threshold depends on its 
 What the calibrations showed:
 - Wording matters more than resolution. "There is text in this image." beat two longer wordings (margin +0.66). For "caption on face" only the wording with `yes`/`no` descriptions separated (margin +0.20, the others overlapped). For the grade, "strong contrast with deep black shadows" separated (margin +0.32) where a three-way graded/flat/other choice never flipped.
 - Inverted wordings ("the face is fully visible") were the weakest every time. Ask about the defect.
+- Ask what the model can see, not a judgment it can't make: "text too small to read" on 360 px stills did not separate (AUC 0.75, the model reads 9 px text), "overlay text in a small font, much smaller than the main captions" did (AUC 1.00). Check your labels when a wording scores "wrong" on a whole video: the first phone calibration called 10 frames false alarms; they carried a real overlay with tiny labels.
 
 ## What it is good at (measured on finished 9:16 talking-head shorts)
 
@@ -120,6 +122,8 @@ What the calibrations showed:
 | Face cut by the frame edge | reframe off by 250 px: 0.85 vs at most 0.42 on whole faces |
 | Grade lost | 0.09–0.16 vs 0.55–0.80 graded |
 | Password on screen | flagged the exact 20.0–26.0 s window (0.93–0.96), no false alarm on 24 shorts including a prompter screen full of text |
+| Text colliding / cut by the frame edge after a transition | collision 0.77–0.97 vs ≤ 0.57 clean; cut-off mean 0.62 vs ≤ 0.42 clean (120 stills after scene changes, AUC 1.00 both) |
+| Overlay text too small for a phone (stills at 360 px) | 0.52–0.97 vs ≤ 0.50 (90 stills, AUC 1.00); soft in the pack |
 | Stray text in generated frames | 0.85–0.92 with text vs at most 0.19 without |
 | Object wiping across a generated take | invented pillar 0.77 vs 0.12–0.18 on five clean takes |
 | Before/after compare | "text added on the face": 0.88; "identical": 0.09 |

@@ -8,7 +8,8 @@ One record per video: <project>/.agents/videos/<slug>/video.md (flat frontmatter
 ## Decisions / ## Notes / ## Log). Published files: <project>/artifacts/videos/<slug>/release.md + index.md.
 Spec: ${CLAUDE_PLUGIN_ROOT}/references/records.md
 Video CI gate: `set` to review/done on master, formats, clips, generate, qc or publish needs the files tested by
-video_ci.py --slug --stage to be unchanged since and not red (references/ci.md); --skip-ci "<why>" passes it, logged.
+video_ci.py --slug --stage to be unchanged since, built from inputs unchanged since (video_ci.py --input/--manifest) and
+not red (references/ci.md); --skip-ci "<why>" passes it, logged.
 
 Project root = $VIDEOS_ROOT, else the nearest folder at or above the current one holding videos.json, else the
 current folder. videos.json (optional; videos.local.json beside it overrides it, keep machine paths there):
@@ -271,6 +272,44 @@ CI_GATED = ("master", "formats", "clips", "generate", "qc", "publish")  # review
 CI_FINALS = ("master", "formats", "clips")  # what qc and publish answer for
 
 
+FP_MAX_FILES = 5000  # folder fingerprints stop here (a HyperFrames project is a few hundred files)
+
+
+def fingerprint(path):
+    """what video_ci.py --input records and the gate compares: a file -> size + mtime; a folder -> sha1 over every
+    file's relative path, size and mtime (hidden folders and __pycache__ skipped). None when the path is gone."""
+    import hashlib
+    p = Path(path).resolve()
+    if p.is_file():
+        st = p.stat()
+        return {"path": str(p), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
+    if not p.is_dir():
+        return None
+    h, n = hashlib.sha1(), 0
+    for f in sorted(p.rglob("*")):
+        rel = f.relative_to(p)
+        if any(part.startswith(".") or part == "__pycache__" for part in rel.parts) or not f.is_file():
+            continue
+        st = f.stat()
+        h.update(f"{rel.as_posix()}|{st.st_size}|{st.st_mtime_ns};".encode())
+        n += 1
+        if n >= FP_MAX_FILES:
+            break
+    return {"path": str(p), "files": n, "fingerprint": h.hexdigest()[:16]}
+
+
+def stale_inputs(entry):
+    """inputs recorded with a CI run that changed since -> list of names."""
+    out = []
+    for old in entry.get("inputs") or []:
+        new = fingerprint(old["path"])
+        if new is None:
+            out.append(f"{Path(old['path']).name} (gone)")
+        elif any(new.get(k) != old.get(k) for k in ("size", "mtime_ns", "fingerprint", "files")):
+            out.append(Path(old["path"]).name)
+    return out
+
+
 def ci_gate(rec_dir, stage):
     """Video CI as a required check: files tested by video_ci.py --slug --stage, unchanged since, none red.
     -> (ok, one-line summary)"""
@@ -292,8 +331,12 @@ def ci_gate(rec_dir, stage):
             bad.append(f"{p.name}: file gone (re-render, or video_ci.py --forget)")
             continue
         st = p.stat()
+        stale = stale_inputs(e)
         if st.st_size != e.get("size") or st.st_mtime_ns != e.get("mtime_ns"):
             bad.append(f"{p.name}: changed after its CI run (run video_ci.py on it again)")
+        elif stale:
+            bad.append(f"{p.name}: built from inputs that changed after its CI run ({', '.join(stale[:4])}): "
+                       f"re-render, then video_ci.py again")
         elif e.get("verdict") == "red":
             bad.append(f"{p.name}: RED: {e.get('why', '')}")
     summary = f"{count['green']} green, {count['amber']} amber, {count['red']} red"
@@ -357,7 +400,10 @@ def cmd_release(a):
                 "source": src, "formats": "", "platforms": "", "post_date": "", "status": "ready",
                 "posted": "", "loudness": "", "qc": ""}
         relmd.write_text("---\n" + "".join(f"{k}: {v}\n" for k, v in head.items()) +
-                         "---\n\n## Caption\n\n## Hashtags\n\n## Notes\n", encoding="utf-8")
+                         "---\n\n## Caption\n\n## Hashtags\n\n## Variants\n\n"
+                         "One row per ad variant (hook × CTA × format, from variants.py); one ad draft each, the human "
+                         "publishes.\n\n| Variant | Hook | CTA | Format | File | Ad draft |\n|---|---|---|---|---|---|\n\n"
+                         "## Notes\n", encoding="utf-8")
     index = pub / "index.md"
     if not index.exists():
         index.write_text("Published videos. One folder per video (release.md + upload-ready files); how it was made = "

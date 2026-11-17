@@ -1,21 +1,67 @@
 {
- "about": "Long master (talking head, podcast, course video) before review or delivery: grade applied, faces inside the frame, secrets on screen. No hook or caption checks (masters carry neither); captions burned into a master: add the short pack's caption_off_face. video_ci.py widens every step on long files so a check never takes more than 150 stills.",
+ "about": "Long master (talking head, podcast, course video) before review or delivery: grade applied, faces inside the frame, secrets on screen, text colliding or cut by the frame edge after scene changes (cards, titles). No hook or caption checks (masters carry neither); captions burned into a master: add the short pack's caption_off_face. video_ci.py widens every step on long files so a check never takes more than 150 stills.",
  "samples": {
-  "spread": {"every": 10, "each": true, "res": "medium"},
-  "grade": {"every": 30, "each": true, "res": "low"},
-  "screens": {"every": 3, "each": true, "res": "high"}
+  "spread": {
+   "every": 10,
+   "each": true,
+   "res": "medium"
+  },
+  "grade": {
+   "every": 30,
+   "each": true,
+   "res": "low"
+  },
+  "screens": {
+   "every": 3,
+   "each": true,
+   "res": "high"
+  },
+  "transitions": {
+   "at": [],
+   "each": true,
+   "res": "high"
+  }
  },
  "checks": [
-  {"id": "face_in_frame", "sample": "spread",
+  {
+   "id": "face_in_frame",
+   "sample": "spread",
    "ask": "The person's head is cropped by the side of the frame.",
    "yes": "the frame edge cuts through the face or head, so an eye, cheek or half the face is missing",
    "no": "the whole head is inside the frame, or no person is shown",
-   "expect": "<0.5"},
-  {"id": "graded", "sample": "grade", "agg": "majority",
+   "expect": "<0.5"
+  },
+  {
+   "id": "graded",
+   "sample": "grade",
+   "agg": "majority",
    "ask": "The image has strong contrast with deep black shadows.",
-   "expect": ">=0.42"},
-  {"id": "no_secrets", "sample": "screens",
+   "expect": ">=0.42"
+  },
+  {
+   "id": "no_secrets",
+   "sample": "screens",
    "ask": "Private information is readable on screen: a password, Wi-Fi network key, email address, phone number, access code or API key.",
-   "expect": "<0.4"}
+   "expect": "<0.4"
+  },
+  {
+   "id": "text_collision",
+   "sample": "transitions",
+   "ask": "Two lines of overlay text sit on top of each other and collide.",
+   "yes": "letters of one text line are drawn over letters of another text line, even faintly",
+   "no": "every text line has its own clear space; no letters cross other letters",
+   "expect": "<0.67",
+   "why": "calibrated on 120 stills taken just after scene changes of 6 shipped renders (9:16 + 16:9) + mutants: two captions overlapping (one at 55 % opacity = crossfade) 0.77-0.97, clean frames max 0.57 (a prompter screen full of text); AUC 1.00"
+  },
+  {
+   "id": "text_cut_off",
+   "sample": "transitions",
+   "ask": "The edge of the video frame cuts through the letters of a caption or title.",
+   "yes": "a caption or title line starts or ends outside the frame, its letters sliced by the outer border of the video",
+   "no": "all captions and titles sit fully inside the video frame; text clipped by a software window, photo or document border does not count",
+   "expect": "<0.44",
+   "band": 0.06,
+   "why": "calibrated on the same 120 stills: caption pushed past the left or right edge 0.39-0.9 (mean 0.62), clean max 0.42 (prompter text clipped by its own window); AUC 1.00, borderline frames land amber"
+  }
  ]
 }

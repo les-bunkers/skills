@@ -141,10 +141,13 @@ def _ffmpeg(args, out):
     return out
 
 
-def prep_still(src, t, res):
+def prep_still(src, t, res, px=None):
+    """px: shrink the SHORT side to px first (phone-size review: 360 = a 9:16 frame as wide as a phone screen)."""
     side = STILL_LONG_SIDE[res]
-    out = cache_dir() / "media" / f"{_prep_key(src, 'still', round(t, 3), side)}.jpg"
+    out = cache_dir() / "media" / f"{_prep_key(src, 'still', round(t, 3), side, *([f'px{px}'] if px else []))}.jpg"
     vf = f"scale='if(gt(iw,ih),min({side},iw),-2)':'if(gt(iw,ih),-2,min({side},ih))'"
+    if px:
+        vf = f"scale='if(gt(iw,ih),-2,min({int(px)},iw))':'if(gt(iw,ih),min({int(px)},ih),-2)':flags=area"
     err = None
     for back in (0.0, 0.1, 0.3, 0.7, 1.5):  # the container can outlast the last video frame (audio tail): step back
         try:
@@ -185,6 +188,7 @@ def b64(path):
 #   at / frames: seconds or list -> still frames     every: seconds -> stills every N s in [from, to)
 #   from / to: seconds (negative = from the end)     audio: true -> audio only     window (+ hop): seconds -> clips
 #   each: true -> one request per still/window (per-frame verdicts)     res: low | medium | high | ultra_high
+#   px: stills shrunk to this short side first (360 = what a phone shows of a 9:16 or 16:9 frame)
 #   label: text before the media    context: text (or list) after it    with: reference files before it
 #   media: another file than the run's media     compare: true -> "Before:" baseline + "After:" media in one input
 
@@ -268,13 +272,15 @@ def plan_inputs(sample, media):
                 t += step
         times = [min(t, max(0.0, dur - 0.05)) for t in times]
         r = res or "high"
+        px = sample.get("px")
+        still = (lambda t: ("image", media, t, r, int(px))) if px else (lambda t: ("image", media, t, r))
         if sample.get("each") or len(times) == 1:
             for t in times:
-                inputs.append({"at": f"{t:.2f}", "t": t, "parts": [("image", media, t, r)]})
+                inputs.append({"at": f"{t:.2f}", "t": t, "parts": [still(t)]})
         else:
             parts = []
             for t in times:
-                parts += [("text", f"Frame at {t:.2f} s:"), ("image", media, t, r)]
+                parts += [("text", f"Frame at {t:.2f} s:"), still(t)]
             inputs.append({"at": ",".join(f"{t:.1f}" for t in times), "t": times, "parts": parts})
     else:
         a, b = _span(sample, dur)
@@ -333,8 +339,8 @@ def part_block(part):
             p, mime = prep_image(src, res), "image/jpeg"
         return {"type": "image", "data": b64(p), "mime_type": mime, "resolution": res}, p
     if kind == "image":
-        _, src, t, res = part
-        p = prep_still(src, t, res)
+        _, src, t, res, *px = part
+        p = prep_still(src, t, res, px[0] if px else None)
         return {"type": "image", "data": b64(p), "mime_type": "image/jpeg", "resolution": res}, p
     if kind == "video":
         _, src, a, b, res = part
@@ -354,7 +360,7 @@ def estimate_tokens(parts, questions):
         if p[0] == "text":
             n += len(p[1]) // 4 + 1
         elif p[0] in ("image", "imagefile"):
-            n += EST_IMAGE[p[-1]]
+            n += EST_IMAGE[p[3] if p[0] == "image" else p[2]]
         elif p[0] == "video":
             n += int((p[3] - p[2]) * EST_VIDEO_TPS[p[4]])
         elif p[0] == "audio":
@@ -660,7 +666,7 @@ def run_checks(spec, media=None, baseline=None, cli_vars=None, var_files=None, o
               and not c.get("disabled")]
     if not checks:
         raise DecideError("no checks selected")
-    groups = {}
+    groups, empty = {}, set()
     for c in checks:
         if not KEY_RE.match(c["id"]):
             raise DecideError(f"check id {c['id']!r}: letters, digits, _ and - only, max 64")
@@ -672,6 +678,9 @@ def run_checks(spec, media=None, baseline=None, cli_vars=None, var_files=None, o
         sample = fill(dict(samples[s]) if isinstance(s, str) else dict(s), variables)
         if isinstance(s, str) and s not in samples:
             raise DecideError(f"check {c['id']}: unknown sample {s!r}")
+        if sample.get("at") == [] and not any(sample.get(k) for k in ("every", "frames", "window", "from", "to", "audio")):
+            empty.add(c["id"])  # a sample filled at run time with no times (no transitions found): nothing to look at
+            continue
         gkey = json.dumps(sample, sort_keys=True, ensure_ascii=False)
         groups.setdefault(gkey, (sample, {}))[1][c["id"]] = {**defaults, **c}
     t0 = time.time()
@@ -682,6 +691,9 @@ def run_checks(spec, media=None, baseline=None, cli_vars=None, var_files=None, o
         cid = c["id"]
         cj = [j for j in jobs if cid in j["questions"]]
         chk = next(j["checks"][cid] for j in cj) if cj else c
+        if cid in empty:
+            results.append({**aggregate(chk, []), "verdict": "info", "note": "no times to sample"})
+            continue
         per = []
         for j in cj:
             if j.get("error"):
@@ -801,6 +813,8 @@ def sample_from_args(a):
         s["audio"] = True
     if a.res:
         s["res"] = a.res
+    if getattr(a, "px", None):
+        s["px"] = a.px
     if getattr(a, "each", False):
         s["each"] = True
     if getattr(a, "window", None):
@@ -1114,6 +1128,7 @@ def add_sample_flags(p, media_nargs=None):
     p.add_argument("--to", type=float, help="span end, seconds (default: end)")
     p.add_argument("--audio", action="store_true", help="send the audio of the span only")
     p.add_argument("--res", choices=RESOLUTIONS, help="low (default for video), high (default for stills; small text)")
+    p.add_argument("--px", type=int, help="stills shrunk to this short side first (360 = phone-size review)")
     p.add_argument("--context", action="append", help="text after the media (transcript, expected text, rules)")
     p.add_argument("--label", help="text before the media")
     p.add_argument("--with", dest="with_", action="append", help="reference file before the media, FILE or FILE:label")

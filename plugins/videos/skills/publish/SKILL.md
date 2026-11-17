@@ -17,6 +17,7 @@ disable-model-invocation: true
 4. release.md: formats, platforms, post_date, caption + hashtags (from the content-hub item when linked, else written here in the project's brand voice; claims checked), loudness and qc lines, CTA link.
 5. Content hub linked (`content:` in the record) → update the item's status and copy through the hub's own tools.
 6. Ads: drafts only in whatever ad tool the team uses; the human publishes.
+   Ad variants (`variants.py`): one ad draft per variant, same caption, audience, budget and placements, only the video differs, named `<slug>-<variant id>`. Fill the `## Variants` table of release.md from `<out>/variants.json` (id, hook text, CTA text, format, file, ad draft id; the base row is the control). The human publishes the drafts and calls the winner.
 7. `videos.py set <slug> publish "review <human>: ready in artifacts/videos/<slug>"`. After posting: release.md `status: posted`, `posted: ig=<url> yt=<url>`, then `videos.py set <slug> publish "done <date>"`.
 
 ## Clip batches

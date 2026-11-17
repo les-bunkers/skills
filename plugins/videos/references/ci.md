@@ -4,6 +4,7 @@ Every file an agent is about to show a human (a review page, a contact sheet, a 
 
 ```
 uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files...> --slug <video> --stage <stage> [--profile P] [--var hook="..." --var cta="..."]
+    [--events <spec.json>] [--input <file or folder> ...] [--manifest <inputs.json>]
 ```
 
 Exit 0 = green, 2 = amber, 1 = red, 3 = could not run. Reports: `<record>/checks/ci/<stage>/<file>.json`, failing frames beside them in `<file>_frames/`, stage index `<record>/checks/ci/<stage>.json`. Without `--slug`: `<file folder>/ci/` (or `--out`).
@@ -21,6 +22,7 @@ Exit 0 = green, 2 = amber, 1 = red, 3 = could not run. Reports: `<record>/checks
 `videos.py set <slug> <stage> "review …" | "done …"` on `master`, `formats`, `clips`, `generate`, `qc` and `publish` reads the stage index and refuses unless:
 - the index has at least one file (`qc` and `publish` read the master, formats, clips and qc indexes together),
 - every file still has the size and modification time it had when CI ran (a re-render after CI = stale = run CI again),
+- every input recorded with `--input` / `--manifest` is unchanged (a file: size + mtime; a folder: a fingerprint of every file's path, size and mtime): an edited spec, a new LUT, a re-cut master or a touched HyperFrames project makes the final stale even though the mp4 itself did not move,
 - no file is red.
 
 The log line records the CI tally (`(CI: 3 green, 1 amber, 0 red)`). A file the human will not see any more (rejected take, dropped format) leaves the index with `video_ci.py <file> --slug <video> --stage <stage> --forget`. `--skip-ci "<why>"` passes the gate anyway and writes the reason in the log; use it only when the human asked for the file as it is.
@@ -31,22 +33,32 @@ Auto: an image → `generated`; portrait or under 3 min → `short`; else `maste
 
 | Profile | For | Tech tier | Visual tier (pack) |
 |---|---|---|---|
-| `short` | finished short, any aspect | H.264/HEVC yuv420p + AAC; −14 ±0.5 LUFS, TP ≤ −1 dBTP; black frames inside the video fail; frozen picture and dead air > 1.5 s flag | `short`: hook text (`--var hook`), closing text (`--var cta`), caption on a face, face cut by the frame edge, grade, secrets |
+| `short` | finished short, any aspect | H.264/HEVC yuv420p + AAC; −14 ±0.5 LUFS, TP ≤ −1 dBTP; black frames inside the video fail; frozen picture and dead air > 1.5 s flag; scene changes found for the transitions sample | `short`: hook text (`--var hook`), closing text (`--var cta`), caption on a face, face cut by the frame edge, grade, secrets, text colliding or cut by the frame edge after each transition, overlay text too small for a phone (soft) |
 | `clip` | vertical clip cut from a long video | same | same; without `--var cta` the closing-text check is skipped (clips often end without one) |
-| `master` | long master | codec/pix/audio present; loudness fails; black, frozen, dead air flag | `master`: face cut by the frame edge, grade, secrets; at most 150 stills per check (~$0.03 per master whatever its length) |
+| `master` | long master | codec/pix/audio present; loudness fails; black, frozen, dead air flag; scene changes | `master`: face cut by the frame edge, grade, secrets, text colliding or cut off after transitions (cards, titles); at most 150 stills per check and 60 transitions (~$0.03-0.05 per master whatever its length) |
 | `generated` | AI keyframe, storyboard, take | readable, no audio needed; black flags | `generated`: stray text, object wiping across the frame; hands as information |
 | `preview` | rough cut, timeline export, low-res review render | everything flags, nothing fails | `secrets` |
 
 Tech checks ignore the first and last 0.5 s (fades). A missing var turns that check amber ("not checked: pass --var hook"), never green.
 
-Visual-tier cost: `short` ≈ 45 requests, ~$0.005, a few seconds; reruns of unchanged frames come from the decide cache for free. Above `--max-cost` (default $0.50 per file) the visual tier is skipped and the file goes amber. The visual tier failing to run (no key, API down) makes the file red: fix it, or `--no-visual "<why>"` (recorded, at best amber). Methods, thresholds and limits of each visual check: [decide](decide.md).
+## Transitions, phone size, soft checks
+
+- **Transitions.** Regular sampling (a still every 2–3 s) misses what happens in the half second after a cut or a graphic entrance: an outgoing label still on screen under the incoming one, a title that slid in past the edge. The tech pass runs ffmpeg `scdet` (threshold 6: layout switches, cuts and graphic entrances, not eased push-ins; 27 found in a 126 s teaching video) in the same decode as black/freeze; `--events <file>` adds known times that change no scene (a label over a static shot): a list of seconds, or `{t|start, dur|duration}` items (the exit at t+dur counts too), or an object holding such a list under `events` / `graphics` / `transitions` / `segments` (graphics specs, cut lists). Events closer than 0.4 s merge; at most 60 per file (given events first, then the strongest scene changes). The pack's `transitions` sample gets stills 0.1 s (mid-transition) and 0.6 s (landed) after each. Run alone (`decide.py run short`), the sample is empty and those checks report `info`.
+- **Phone size.** `phone_small_text` looks at a still every 4 s shrunk to 360 px wide (decide sample key `px`), the size a phone shows. It asks whether overlay text is set much smaller than the captions: "too small to read" wordings failed (AUC 0.75) because the model reads 9 px text.
+- **Soft checks** (`"soft": true` in a pack check): a fail shows as AMBER with "(soft check: shown, not blocking)". For calls a human should see but that must not stop a delivery on their own (legibility at phone size).
+
+## Provenance (stale inputs)
+
+Pass the files a render was built from: `--input row.json --input formats/9x16 --input grade.cube` (repeat), or `--manifest inputs.json` (`{"inputs": [paths]}` or a list, relative to the manifest; builders can write one beside their output). The report and the stage index keep each input's print; `videos.py set … review|done` refuses once one of them changed ("built from inputs that changed after its CI run (row.json)"). Re-render, then re-run CI. Folders are fingerprinted from file names, sizes and mtimes (hidden folders and `__pycache__` skipped, at most 5000 files), so a big project costs a directory walk, not a hash of its media.
+
+Visual-tier cost: `short` ≈ 70 requests for a 48 s short, ~$0.008, 30 s; a 2-min teaching video ≈ 200 requests, ~$0.02, 65 s; reruns of unchanged frames come from the decide cache for free. Above `--max-cost` (default $0.50 per file) the visual tier is skipped and the file goes amber. The visual tier failing to run (no key, API down) makes the file red: fix it, or `--no-visual "<why>"` (recorded, at best amber). Methods, thresholds and limits of each visual check: [decide](decide.md).
 
 ## Where each stage runs it
 
 | Stage | Files | Command |
 |---|---|---|
 | master | the rendered master | `video_ci.py <master> --slug <v> --stage master` (after `finals_check.py`) |
-| formats | every rendered format | `video_ci.py <finals> --slug <v> --stage formats --var hook=... --var cta=...` |
+| formats | every rendered format | `video_ci.py <finals> --slug <v> --stage formats --var hook=... --var cta=... --events <graphics spec> --input <spec> --input <project dir>` |
 | clips | every clip of the batch × the look shown | `video_ci.py <clips> --slug <batch> --stage clips --profile clip --var hook=...` (per clip hook: run per clip) |
 | generate | every keyframe and take before a review page or a paid render | `video_ci.py <takes> --slug <v> --stage generate --profile generated` |
 | rough / tighten | a review render, when one is made | `video_ci.py <render> --profile preview` (no gate: the human reviews these in the NLE) |
@@ -54,4 +66,14 @@ Visual-tier cost: `short` ≈ 45 requests, ~$0.005, a few seconds; reruns of unc
 
 ## Measured
 
-On a 48 s 9:16 short and six broken copies (hook cut, end cut, grade removed, caption moved onto the face, reframe off by 250 px, a Wi-Fi password card): the untouched file green, each broken file red on its own check, 5 s for four files from cache. A generated take where the model invented a pillar crossing the frame: red; a clean take of the same shot and its storyboard: green. Gate: refused with no report, refused with a red file, passed after `--forget`, refused after the file changed, passed with `--skip-ci` and logged.
+On a 48 s 9:16 short and six broken copies (hook cut, end cut, grade removed, caption moved onto the face, reframe off by 250 px, a Wi-Fi password card): the untouched file green, each broken file red on its own check, 5 s for four files from cache. A generated take where the model invented a pillar crossing the frame: red; a clean take of the same shot and its storyboard: green. Gate: refused with no report, refused with a red file, passed after `--forget`, refused after the file changed, passed with `--skip-ci` and logged; refused after a `--input` file changed and after a file was added to a `--input` folder.
+
+Transition and phone checks, calibrated on 120 stills taken 0.1 s and 0.6 s after scene changes of 6 shipped renders (two 9:16 shorts, two 9:16 and two 16:9 teaching videos) plus mutants drawn on copies:
+
+| Check | Separation |
+|---|---|
+| `text_collision` (two captions overlapping, one at 55 % = crossfade) | mutants 0.77–0.97, clean frames ≤ 0.57 (a prompter screen full of text); AUC 1.00, threshold 0.67 |
+| `text_cut_off` (a caption running past the left or right edge) | mutants 0.39–0.90 (mean 0.62), clean ≤ 0.42 (prompter text clipped by its own window); AUC 1.00, borderline frames go amber (band 0.06) |
+| `phone_small_text` (24–28 px labels on a 1080 frame, shrunk to 360) | small labels 0.52–0.97, captions-only and screen-recording frames ≤ 0.50; AUC 1.00 on 90 stills. It found a real case: a teaching video whose pedal-board overlay carries labels that are unreadable at phone size |
+
+End to end on a 48 s short with three defects drawn in (collision after a cut, a caption cut by the right edge, a collision over a static shot given only through `--events`, a 26 px chip): each caught at its time; the untouched short passed all three checks.
