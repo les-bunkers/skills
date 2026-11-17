@@ -44,4 +44,6 @@ Music at −6 dB + 1 kHz beat clicks, 1.6 kHz accented downbeats, 700 Hz half be
 | isolated arp stem | 100 | 133 vs 100 tie | +2.0 ms with `--bpm 100` |
 | two library beds (wav, mp3; 148 s, 141 s) | ? | 85.00, 78.00 steady | 2.6 / 1.9 ms rms on 77 % / 98 % of beats; slipped stretches flagged |
 
+HyperFrames 0.9.19 has its own tracker (`hyperframes beats <file> --json`, `hyperframes audio <file> --only beats,downbeats,bpm,sections --json`), local "signal" provider on the same truth: loop 100.1 bpm, beats +21.5 ms late; drum stem 100, +12.3 ms, downbeats one beat off; arp stem 133.3; the mp4 whose audio starts at 0.5 s → no beats. Fine for a quick bpm read; use beats.py for cue timing. Its neural provider (`HYPERFRAMES_BEAT_THIS_PYTHON`, beat-this) was not tested.
+
 A `--start 20 --end 60` window matches the full-file grid within 1.0 ms. Runtime: 2–5 s per track, cached rerun 0.45 s; first run ~17–35 s (wheels ~100 MB, numba JIT). Python 3.11 resolves librosa 0.11, 3.12+ librosa 1.0; results identical on 3.11, 3.13, 3.14. Numba raises on Windows when a cache path passes 260 characters: beats.py moves its cache to the temp folder when the install path is long. Section boundaries are not yet checked against ground truth.
