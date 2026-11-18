@@ -27,7 +27,7 @@ argument-hint: "[video name or slug]"
 | audio | `/videos:audio` | speech cleanup, speaker split, −14 LUFS master (→ `audio-cleanup` plugin) |
 | grade | `/videos:grade` | one look per set, LUT export |
 | master | `/videos:master` | render from the NLE, read the cuts back, check the file |
-| formats | `/videos:formats` | 9:16 · 4:3 · 16:9, captions, hook, graphics, end card |
+| formats | `/videos:formats` | graphics, captions, hook, end card as alpha layers in the NLE; 9:16 · 4:3 · 16:9 |
 | clips | `/videos:clips` | vertical clips cut from a long video or podcast (→ `vertical-clips` plugin) |
 | qc | `/videos:qc` | one gate before anything ships |
 | publish | `/videos:publish` | finals into `artifacts/videos/<slug>/`, post text, covers, schedule |
@@ -57,6 +57,7 @@ Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROO
 - One render chain at a time; check free RAM first (< 4 GB → wait). Background jobs longer than ~10 min get a periodic check that they are still moving.
 - NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's.
 - Camera changes on a multicam edit = the multicam clip's active angle, never another camera's clip on a track above it (Resolve: `scripts/resolve_multicam_angles.py`).
+- Graphics are layers; compositing happens in the NLE. Anything drawn over footage (motion graphics, cards, labels, highlight boxes, hook and end cards, designed captions) renders alone with alpha (HyperFrames `--format mov` = ProRes 4444 + alpha, transparent root), on a canvas the size of the target timeline with the element at its default place (Resolve scales a smaller clip up to fit the frame), and goes on its own named track above the picture, where the human can move, scale, trim or drop it without a re-render. Changes to the footage itself (zooms, punch-ins, reframes, blurs and redactions, PiP of another camera, transitions, grade) are made on the clips in the NLE, never baked into a rendered copy of the cut. Bake graphics into one rendered video only for motion-only pieces with no footage under them, or a hands-off batch the human asked for. [layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md)
 - Review pages for the human run on localhost (`python -m http.server --bind 127.0.0.1 <port>`); stop servers by their PID.
 - Never modify source media. Heavy media (rushes, masters, renders, HyperFrames projects) goes under `media_root`; the project keeps records, cut data, reports and upload-ready finals.
 - Before publishing, check the picture for readable secrets (passwords, Wi-Fi keys, emails, phone numbers, client screens): video CI scans finals for them, `/videos:qc` has the procedure for screen recordings.

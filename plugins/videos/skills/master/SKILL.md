@@ -20,6 +20,6 @@ argument-hint: "[video name]"
 
 ## Rules
 
-- Text-free master: captions, hooks and graphics come in `/videos:formats`, from `cut/final.cuts.json` and the tight SRT.
+- Graphics live as alpha layers on the timeline by default (`/videos:formats`, [layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md)): render with the layers track on and that render is the 16:9 final. A text-free master (layers track off) only when a baked route needs it: captions, hooks and graphics then come in `/videos:formats`, from `cut/final.cuts.json` and the tight SRT.
 - A cut moved after the render → read the cuts again (step 2), re-render, re-check, rerun formats for that video only.
 - `/videos:qc` is the gate before anything ships.

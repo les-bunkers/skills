@@ -1,12 +1,27 @@
 ---
 name: formats
-description: Formats stage — turns a master into the shipped formats (9:16, 4:3, 16:9) with word-timed captions, a hook card, motion graphics and an end card, one HyperFrames project per format, then renders and solves loudness per file. Use when cropping a master to vertical/square/wide, adding captions, hooks, end cards or motion graphics to a video, building an offer video or bumper, or running /videos:formats.
+description: Formats stage — graphics, captions, hook and end cards rendered as transparent (alpha) layers and composited on the NLE timeline by default, the 16:9 / 9:16 / 4:3 versions rendered from the NLE, loudness and video CI per file; a baked HyperFrames route for hands-off batches. Use when adding motion graphics, overlays, captions, hooks or end cards to a video, rendering graphics with transparency for Resolve, cropping a master to vertical/square/wide, building an offer video or bumper, or running /videos:formats.
 argument-hint: "[video name] [formats]"
 ---
 
 `videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. Engine: HyperFrames (HTML → video; `npm install -g hyperframes`, then its own skills: `/hyperframes` — read captions, overlays, vertical and format guides first, motion and review guides before any motion). Brand and look = the record's `style:` files; none → ask for the brand doc once and add it to `style:`.
 
-## Feature short (talking head + captions + hook + end card)
+## Graphics on an edit: alpha layers in the NLE (default)
+
+Everything drawn over footage is a layer: rendered alone with a transparent background, placed on its own named track above the picture, composited by the NLE. The human can move, scale, trim or drop any layer without a re-render, and their cut, angles and reframes stay untouched. Zooms, blurs, PiP of another camera and transitions are made on the clips in the NLE, never baked. Render, placement and alpha details: [layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md).
+
+1. Inputs: the approved edit timeline (record `resolve:`), the Words file of the cut (source transcript shifted through the cuts read back from the timeline, `/videos:master` step 2), copy from the content-hub item when the record links one.
+2. Plan the layers: one per idea, cued on the words it illustrates → `<media>/layers/layers.json` (id, record frame, frames, track, anchor words, note). Claims check on every text first: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/claims_check.py" <spec or project dir> --slug <slug> --words <cut words>`.
+3. Build each layer as a HyperFrames composition with a transparent root on a canvas of the timeline's aspect, the element at its default place; `hyperframes check --at-transitions --json`; render `--format mov --resolution <preset matching the timeline>` (ProRes 4444 + alpha) to `<media>/layers/renders/`. First layer = preview: one built, placed and approved before the batch.
+4. Place them on the edit timeline on a track named for the layers (V1 / A1 untouched, one marker per layer). Switching the current timeline under a human who is editing → ask first, switch back after.
+5. Look at a composite still per layer (edges, position, nothing over a face or the caption band), then `videos.py set <slug> formats "doing layers on <timeline> track <name>, <human> adjusting in the NLE"` (`doing`: no render exists yet for CI to test; `review` comes with the CI'd renders of step 8) and let the human adjust in the NLE.
+6. Formats: 16:9 = the master rendered from the NLE with the layers track on (`/videos:master`). 9:16 / 4:3 = a timeline per format in the NLE (the cut reframed per clip, format-specific layers authored at that format's size, captions inside the platform safe area), rendered from the NLE.
+7. Captions: the NLE's subtitle track when a plain look is enough; a designed word-highlight look = one caption layer per format rendered with alpha (rules in the baked route step 2), rebuilt when the cut moves.
+8. Loudness and video CI on every NLE render that ships: steps 4–6 of the baked route below, with `--input <layers.json>` so CI refuses a final once the layers changed.
+
+## Baked route: one HyperFrames render per format (fallback)
+
+Only for motion-only pieces with no footage under them (bumper, motion beat) or a hands-off batch the human asked for (many shorts, ad variants of an approved baked short).
 
 1. Inputs: the master from `/videos:master`, the Words file of the master (shift the source transcript through the cut list, or transcribe the master itself), hook text, CTA line + URL, end-card length. Copy (hook, on-screen text, CTA) comes from the content-hub item when the record links one.
 2. One HyperFrames project folder per format, one root per folder: `<media>/formats/<fmt>/index.html`.
@@ -26,7 +41,7 @@ argument-hint: "[video name] [formats]"
 - Springs are closed-form functions of time (`1 - e^(-ζωt)(cos ω_d t + k sin ω_d t)` on normalized time), never a simulation stepped frame by frame: a seekable render draws frame 600 without frames 0–599.
 - Split edges: a moving indicator, underline or chip springs its leading edge first and its trailing edge ~0.07 s later on a stiffer spring, so it stretches in flight and settles at its new width. A rigid box sliding at constant speed reads as generated.
 - Container first, text second: the old label is gone by the time its box starts moving; the new label enters once the box is ~70 % of the way. Two labels readable in one box at once is the overlap video CI flags (`text_collision`).
-- Build graphics as HyperFrames compositions or overlays timed to words in the Words file (cue on words, not guessed frames), rendered with alpha (ProRes 4444 `.mov`) when they go back into the NLE.
+- Build graphics as HyperFrames compositions timed to words in the Words file (cue on words, not guessed frames), rendered with alpha (ProRes 4444 `.mov`) as layers for the NLE unless the piece is baked ([layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md)). A transparent layer can't blur the footage under it: panels ~.9 opaque + soft shadow, no `backdrop-filter`.
 - Music-led pieces only (bumper, offer video, hook card, motion-only piece; voice-led videos keep cueing on words): map the bed once, `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/beats.py" analyze <bed> --out <media>/formats/music/<bed>.beats.json` (bpm, beats, downbeats, hits, sections; 2–5 s per track, ~20 s on first run). Write cue times in the graphics spec, then land them: `beats.py snap <bed>.beats.json --json <spec> --path <list.path.*.cues> --key t --grid downbeat,beat --fps <fps> [--offset <timeline position of music 0>]` → a new `<spec>.snapped.json`. Snap the frame where a graphic lands (impact, final counter number, cut), not the start of its ease-in; big entrances on downbeats, counters and chips on beats, accents `--grid hit --min-strength 0.8`. Hear it first: `beats.py click <bed> <bed>.beats.json <bed>.click.wav`. [beats](${CLAUDE_PLUGIN_ROOT}/references/beats.md)
 - 3D objects: render sprites headless in Blender, place them as images.
 - Check vertical centering of text inside chips and pills on a rendered frame: display fonts often sit several pixels low.
@@ -43,4 +58,4 @@ An approved short can ship 2–3 opening hooks (and CTAs) without a rebuild: `uv
 
 ## Gate and record
 
-First short of a batch = preview: `videos.py set <slug> formats "review <human>: <renders folder or review page>"` (refused without fresh, non-red CI on the formats); batch the rest only after the go. Done → `formats "done <date> 9x16 16x9 4x3"`, then `/videos:qc`. Many verticals cut from long podcasts → `/videos:clips`.
+Layers route: `doing` while the human adjusts layers in the NLE, `review` once the NLE renders passed CI. First short of a baked batch = preview: `videos.py set <slug> formats "review <human>: <renders folder or review page>"` (refused without fresh, non-red CI on the formats); batch the rest only after the go. Done → `formats "done <date> 9x16 16x9 4x3"`, then `/videos:qc`. Many verticals cut from long podcasts → `/videos:clips`.
