@@ -1,0 +1,74 @@
+---
+name: resolve
+description: Drive DaVinci Resolve Studio from an agent through Blackmagic's DaVinci Resolve MCP — the rules every call follows (timeouts that don't stop scripts, sandbox vs unsafe, one Resolve shared with the human and other sessions, save and restore state, check every return value) and the log of what failed before (imports, appends, subtitles, markers, multicam angles, audio edits, renders, frame grabs, LUTs, Fusion, restarts, hangs). Use before any Resolve MCP call (run_script, run_script_unsafe, get_image, get_thumbnails, describe_grade), when a Resolve script silently does nothing, returns False/None/[] or times out, when Resolve hangs, won't launch or the MCP says it is not running, or when running /videos:resolve.
+---
+
+The stages that touch Resolve (ingest, rough, tighten, audio, grade, master, formats) follow these rules. The full log of what works and what failed, by area: [resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md). Read the section for the area you are about to touch before writing the script.
+
+## Before the first call
+
+1. Tools deferred → load the ones you need in one ToolSearch call (`select:mcp__DaVinci_Resolve__run_script,…`).
+2. `get_resolve_status`. Not running → `launch_resolve`. "Did not respond within 60s" while a Resolve process exists → App lifecycle in the log.
+3. One read-only probe (`run_script`, `timeout` 30): project name, current timeline, page, `project.IsRenderingInProgress()`, number of render jobs. Another project is open than the one you expect → stop and ask; don't switch projects while the human works.
+
+## Every script
+
+```python
+pm = resolve.GetProjectManager(); project = pm.GetCurrentProject()
+assert project.GetName() == PROJECT, project.GetName()
+if project.IsRenderingInProgress():
+    result = {"skipped": "a render is running"}          # never raise SystemExit: its message is lost
+else:
+    mp = project.GetMediaPool()
+    tl0, page0, folder0 = project.GetCurrentTimeline(), resolve.GetCurrentPage(), mp.GetCurrentFolder()
+    tls = [project.GetTimelineByIndex(i) for i in range(1, project.GetTimelineCount() + 1)]
+    tl = next((t for t in tls if t.GetName() == NAME), None)   # by name, never "the current one"
+    done = {}
+    try:
+        ...  # the change; record what happened in `done`
+    finally:
+        if tl0: project.SetCurrentTimeline(tl0)           # None right after a relaunch
+        if page0: resolve.OpenPage(page0)
+        mp.SetCurrentFolder(folder0)
+    result = {"timeline": NAME, **done}
+```
+
+- Pass `timeout` on every call (default 10 s, max 60). A timeout does NOT stop the script: it keeps running inside Resolve and its changes land. After a timeout, wait, read the state back in a separate call, rerun only what is missing. Scripts are idempotent (skip what is done).
+- Budget wall-clock time inside loops (`time.time() - t0 < 40`, counting 10 s per frame render), return `left`, call again until 0. Probe files (ffprobe) outside Resolve and pass the results in.
+- `run_script` for reads (sandbox: no `open`, `os`, nor anything that imports them); `run_script_unsafe` when a script reads or writes files or runs a program. Keep logic in a file and `exec(open(path, encoding="utf-8").read())` it, with config globals set before the exec.
+- Check every return value: False, None, `[]` and `""` mean nothing happened, usually without an error (unknown attributes and setting names return None or `""`). Count after the change: items placed, markers, cues, jobs.
+- Never trust the stubs for setter values; set render keys one at a time and read each return.
+- Small results: big dumps go to a JSON file, the result carries counts and the path.
+
+## Sharing Resolve
+
+One Resolve serves every agent session and the human: one project, current timeline, page, media-pool folder, render queue and frame renderer.
+
+- One agent changes Resolve at a time; the others read. Frame renders too: three agents rendering frames at once wedged the renderer for half an hour.
+- Nothing changes while a render runs (imports return `[]`, markers return False).
+- Never `DeleteAllRenderJobs`; delete only your own job ids after `Complete`. After a render, `OpenPage("edit")`: on Deliver, track toggles return True and change nothing.
+- Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. Build new timelines beside old ones; delete or replace only what your own build made, after comparing it with the last build (hand edits → ask).
+- `DuplicateTimeline` and `ImportTimelineFromFile` make the new timeline current: restore the previous one.
+- Files on a timeline are held open: re-render to a new path, then `ReplaceClip`.
+- See Resolve's state through the API, `get_image` / `get_thumbnails`, or a capture of the Resolve window alone; never a desktop screenshot.
+
+## Verify
+
+- After a build: counts against the plan, then `get_thumbnails source=timeline` (renders the current timeline; subtitles don't show). Subtitles: compare each cue's text with the SRT.
+- After a render: `GetRenderJobStatus` = `Complete`, then ffprobe each file for a video stream, its frame count and its sound. The first job of a batch can come out without video: queue a 1-second throwaway job first.
+- An effect is checked against the same frame without it, or against the source frame, never from one frame alone.
+
+## When something fails
+
+| Symptom | Log section |
+|---|---|
+| `Script timed out` / a call runs for minutes | Running scripts |
+| Import returns `[]`, marker or toggle does nothing, wrong project or timeline | One Resolve, many callers; Media pool; Tracks |
+| Append places nothing, subtitles at the end, 1-frame-short items | Timelines; Subtitles |
+| Render without video, wrong size or bitrate, WAV comes out `.mov` | Rendering |
+| `Failed to render frame` | Frames and visual checks |
+| ExportLUT False, empty node graph | Grade and LUTs |
+| Fusion comp built but nothing renders, keyframes overshoot | Fusion, effects and templates |
+| Not running, splash hang, Quit ignored, Resolve closed by Windows | App lifecycle |
+
+A failure that isn't in the log: once solved (or given up), add it to its section in `references/resolve.md` as `✗ tried → what happened → what to do instead`, generic (no project names, people, drives or machine names).

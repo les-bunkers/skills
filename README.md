@@ -27,7 +27,7 @@ Updates: `/plugin marketplace update les-bunkers`.
 
 | Plugin | Skills | What it does |
 |---|---|---|
-| `videos` | `/videos`, `/videos:new`, `:ingest`, `:transcribe`, `:rough`, `:tighten`, `:audio`, `:grade`, `:master`, `:formats`, `:clips`, `:qc`, `:publish` | The pipeline. `/videos` shows a board of every video in progress; `/videos <name>` opens one and runs or proposes its next stage. Each stage has its own skill and writes its status back to the video's record. |
+| `videos` | `/videos`, `/videos:new`, `:ingest`, `:transcribe`, `:rough`, `:tighten`, `:audio`, `:grade`, `:master`, `:formats`, `:clips`, `:qc`, `:publish`, `:resolve` | The pipeline. `/videos` shows a board of every video in progress; `/videos <name>` opens one and runs or proposes its next stage. Each stage has its own skill and writes its status back to the video's record. |
 | `audio-cleanup` | `/audio-cleanup` | Speech cleanup for a DaVinci Resolve edit: plans from what the timeline actually plays, splits two speakers on one mic, enhances speech, masters to −14 LUFS, puts the new tracks back in Resolve and builds an A/B listening page. |
 | `vertical-clips` | `/vertical-clips` | A 9:16 clip factory for podcasts and long videos: sticky face crops, stacked two-person layout, caption text fixed against three transcripts, word-timed captions and hook rendered with HyperFrames, QC, a review page and export. |
 | `agent-ears` | `/agent-ears`, `/ears-bakeoff` | Lets an agent hear breaths and fillers (« euh », "um") so the tighten stage can cut them, and a blind labelling page plus scoring kit to test any detector against your own ears. |

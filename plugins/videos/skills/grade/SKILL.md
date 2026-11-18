@@ -4,7 +4,7 @@ description: Color grade stage — one look per set or shoot, graded by the huma
 argument-hint: "[video name] [set]"
 ---
 
-`videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. Resolve calls go through Blackmagic's DaVinci Resolve MCP (Resolve Studio; tools `run_script`, `describe_grade`, `generate_lut`).
+`videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. Resolve calls go through Blackmagic's DaVinci Resolve MCP (Resolve Studio; tools `run_script`, `describe_grade`, `generate_lut`); rules for every call: `/videos:resolve`, LUT failures: [resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md) § Grade and LUTs.
 
 ## Rule
 

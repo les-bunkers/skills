@@ -4,7 +4,7 @@ description: Master stage of a video — render the approved DaVinci Resolve tim
 argument-hint: "[video name]"
 ---
 
-`videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. `S` = `${CLAUDE_PLUGIN_ROOT}/scripts`. Work from the record folder (`videos.py show <video>` → `record:`). Resolve notes: [engine](${CLAUDE_PLUGIN_ROOT}/references/engine.md) § Resolve.
+`videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. `S` = `${CLAUDE_PLUGIN_ROOT}/scripts`. Work from the record folder (`videos.py show <video>` → `record:`). Resolve rules and failure log: `/videos:resolve` ([resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md) § Rendering); engine notes: [engine](${CLAUDE_PLUGIN_ROOT}/references/engine.md) § Resolve.
 
 ## Do
 

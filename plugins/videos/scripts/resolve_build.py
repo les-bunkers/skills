@@ -267,6 +267,8 @@ def run_in_resolve(resolve, project, args):
         by_file = {key(P.file(sid)): sid for sid in P.sources}
         segs, unknown = [], []
         for it in tl.GetItemListInTrack("audio", 1) or []:
+            if it.GetSourceStartFrame() is None:  # 1-frame audio cross fade: listed as an item, no source
+                continue
             mpi = it.GetMediaPoolItem()
             nm = mpi.GetClipProperty("Clip Name") if mpi else ""
             fp = mpi.GetClipProperty("File Path") if mpi else ""
