@@ -32,7 +32,7 @@ argument-hint: "[video name or slug]"
 | qc | `/videos:qc` | one gate before anything ships |
 | publish | `/videos:publish` | finals into `artifacts/videos/<slug>/`, post text, covers, schedule |
 
-Not a stage: `/videos:resolve` = rules and failure log for driving DaVinci Resolve through its MCP, used by every stage that touches Resolve.
+Not stages: `/videos:resolve` = rules and failure log for driving DaVinci Resolve through its MCP, used by every stage that touches Resolve; `/videos:learn` = folds past mistakes (record lessons + past agent sessions) back into the skills or the project's notes.
 
 Companion plugins from the same marketplace: `audio-cleanup`, `vertical-clips`, `agent-ears` (breath / filler detection used by tighten). Missing → `/plugin install <name>@les-bunkers`.
 
@@ -52,6 +52,7 @@ Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROO
 
 - Taste lives in the project: a stage that cuts or styles reads the record's `style:` files (edit style, caption look, brand). None → ask once, write the answer into a style file and add it to `style:`.
 - Preview before full builds: one video, clip or look approved before a batch. Gates = status `review` until the human says go.
+- Mistakes are lessons: when the human corrects or rejects something, a call fails or silently does nothing, or work has to be redone, log it once fixed: `videos.py lesson <slug> <stage> "<tried> → <what happened> → <do instead>"`. `/videos:learn` folds them into the skills; after a video ships, or when `videos.py lessons` lists several, offer it.
 - Paid calls (speech-to-text APIs, generation, dubbing) need a go-ahead per job; cache every result next to the job and never request it twice.
 - Local GPU generation (video or image models running on your own card) costs nothing per call but holds the GPU and a lot of RAM: run only what was asked and say the expected minutes first.
 - Never cut voice the transcript lacks: words a speech-to-text model missed are listed for the human, not cut.

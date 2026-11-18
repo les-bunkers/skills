@@ -15,7 +15,8 @@ Project root = $VIDEOS_ROOT, else the nearest folder at or above the current one
 current folder. videos.json (optional; videos.local.json beside it overrides it, keep machine paths there):
   {"records": ".agents/videos", "published": "artifacts/videos", "media_root": "/mnt/media", "workspaces": "clients/*"}
 "workspaces" = glob of sub-projects that each hold their own records (several clients/brands in one tree).
-$VIDEOS_MEDIA_ROOT overrides media_root.
+$VIDEOS_MEDIA_ROOT overrides media_root. "skills_repo" (or $VIDEOS_SKILLS_REPO) = a git clone of the plugin repo, where
+/videos:learn writes lessons that hold for every project.
 
   python videos.py where
   python videos.py init [--media-root PATH] [--workspaces GLOB]
@@ -24,6 +25,8 @@ $VIDEOS_MEDIA_ROOT overrides media_root.
   python videos.py new <slug> --title T --kind K [--ws W] [--campaign C] [--content IDS] [--style P] [--code P] [--media P] [--talent N] [--next N]
   python videos.py set <slug> <stage|key> "<value>" [--next "<next step>"] [--skip-ci "<why>"]
   python videos.py note <slug> "<text>"
+  python videos.py lesson <slug> <stage> "<tried> -> <what happened> -> <do instead>"
+  python videos.py lessons [--ws W] [--all]
   python videos.py release <slug>
 """
 import argparse
@@ -50,7 +53,7 @@ ABBR = {"brief": "brf", "generate": "gen", "ingest": "ing", "transcribe": "stt",
 MARK = {"done": "✓", "skip": "·", "todo": "-", "doing": "▶", "review": "R", "blocked": "✕"}
 STATUS = ("todo", "doing", "review", "done", "skip", "blocked")
 TODAY = datetime.date.today().isoformat()
-DEFAULTS = {"records": ".agents/videos", "published": "artifacts/videos", "media_root": "", "workspaces": ""}
+DEFAULTS = {"records": ".agents/videos", "published": "artifacts/videos", "media_root": "", "workspaces": "", "skills_repo": ""}
 
 
 def find_root():
@@ -79,6 +82,8 @@ def load_config():
     if os.environ.get("VIDEOS_MEDIA_ROOT"):
         cfg["media_root"] = os.environ["VIDEOS_MEDIA_ROOT"]
     cfg["media_root"] = (cfg.get("media_root") or "").rstrip("/\\")
+    if os.environ.get("VIDEOS_SKILLS_REPO"):
+        cfg["skills_repo"] = os.environ["VIDEOS_SKILLS_REPO"]
     return cfg
 
 
@@ -171,6 +176,7 @@ def cmd_where(a):
     print(f"config: {', '.join(n for n in ('videos.json', 'videos.local.json') if (ROOT / n).is_file()) or 'none (defaults)'}")
     print(f"records: <workspace>/{CFG['records']}   published: <workspace>/{CFG['published']}")
     print(f"media_root: {CFG['media_root'] or '(not set: heavy media stays wherever the sources are)'}")
+    print(f"skills_repo: {CFG['skills_repo'] or '(not set: /videos:learn keeps general lessons in the project)'}")
     for name, d in workspaces():
         print(f"- {name}: {rel(d) or '.'} ({len(list((d / CFG['records']).glob('*/video.md')))} record(s))")
 
@@ -366,7 +372,7 @@ def cmd_set(a):
         meta["next"] = a.next
     meta["updated"] = TODAY
     line = f"- {TODAY} {a.key}: {a.value}{ci_note}" + (f" → next: {a.next}" if a.next else "")
-    body = body.rstrip("\n") + "\n" + line + "\n" if "## Log" in body else body.rstrip("\n") + f"\n\n## Log\n{line}\n"
+    body = add_line(body, "Log", line)
     vm.write_text(dump(meta, body), encoding="utf-8")
     print(f"{meta.get('slug')}: {a.key} = {a.value}" + (f"; next = {a.next}" if a.next else ""))
 
@@ -374,17 +380,48 @@ def cmd_set(a):
 def cmd_note(a):
     vm, _, _, _ = one(a.slug)
     meta, body = parse(vm)
-    line = f"- {TODAY} {a.text}"
-    if "## Notes" in body:
-        head, rest = body.split("## Notes", 1)
-        nxt = rest.find("\n## ")
-        notes, tail = (rest, "") if nxt < 0 else (rest[:nxt], rest[nxt:])
-        body = head + "## Notes" + notes.rstrip("\n") + "\n" + line + "\n" + tail
-    else:
-        body = body.rstrip("\n") + f"\n\n## Notes\n{line}\n"
+    body = add_line(body, "Notes", f"- {TODAY} {a.text}")
     meta["updated"] = TODAY
     vm.write_text(dump(meta, body), encoding="utf-8")
     print(f"{meta.get('slug')}: note added")
+
+
+def add_line(body, section, line):
+    """Append a line at the end of a ## section, creating the section at the end of the body."""
+    if f"## {section}" in body:
+        head, rest = body.split(f"## {section}", 1)
+        nxt = rest.find("\n## ")
+        part, tail = (rest, "") if nxt < 0 else (rest[:nxt], rest[nxt:])
+        return head + f"## {section}" + part.rstrip("\n") + "\n" + line + "\n" + tail
+    return body.rstrip("\n") + f"\n\n## {section}\n{line}\n"
+
+
+def cmd_lesson(a):
+    vm, _, _, _ = one(a.slug)
+    if a.stage not in STAGES + ["any"]:
+        sys.exit(f"stage = one of: {', '.join(STAGES)}, any (got '{a.stage}')")
+    meta, body = parse(vm)
+    body = add_line(body, "Lessons", f"- [ ] {TODAY} {a.stage}: {a.text}")
+    meta["updated"] = TODAY
+    vm.write_text(dump(meta, body), encoding="utf-8")
+    print(f"{meta.get('slug')}: lesson added ({a.stage})")
+
+
+def cmd_lessons(a):
+    n = 0
+    for vm, m, ws, _ in records(a.ws):
+        _, body = parse(vm)
+        if "## Lessons" not in body:
+            continue
+        part = body.split("## Lessons", 1)[1]
+        nxt = part.find("\n## ")
+        part = part if nxt < 0 else part[:nxt]
+        for line in part.splitlines():
+            done = line.startswith("- [x]")
+            if line.startswith("- [ ]") or (a.all and done):
+                n += 1
+                print(f"{ws}/{m.get('slug', vm.parent.name)}  {line[2:]}  ({rel(vm)})")
+    print(f"{n} {'lesson(s)' if a.all else 'open lesson(s)'}")
 
 
 def cmd_release(a):
@@ -445,11 +482,18 @@ def main():
     o = sub.add_parser("note", help="add a dated line under ## Notes")
     o.add_argument("slug")
     o.add_argument("text")
+    ls = sub.add_parser("lesson", help="log a mistake and its fix under ## Lessons (folded in later by /videos:learn)")
+    ls.add_argument("slug")
+    ls.add_argument("stage")
+    ls.add_argument("text")
+    lz = sub.add_parser("lessons", help="list lessons not yet folded into the skills or the project's notes")
+    lz.add_argument("--ws")
+    lz.add_argument("--all", action="store_true", help="include folded ones")
     r = sub.add_parser("release", help="create the published folder + index row")
     r.add_argument("slug")
     a = p.parse_args()
     {"where": cmd_where, "init": cmd_init, "board": cmd_board, "show": cmd_show, "new": cmd_new, "set": cmd_set,
-     "note": cmd_note, "release": cmd_release}[a.cmd](a)
+     "note": cmd_note, "lesson": cmd_lesson, "lessons": cmd_lessons, "release": cmd_release}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -52,7 +52,7 @@ Status = the first word of a stage value:
 | `skip` | does not apply to this kind or this video |
 | `blocked` | the rest says why |
 
-Body: `## Decisions` (what the human chose, dated) · `## Notes` (review notes, agent doubts, typos to check) · `## Log` (`videos.py set` appends `- 2026-03-04 tighten: done …`).
+Body: `## Decisions` (what the human chose, dated) · `## Notes` (review notes, agent doubts, typos to check) · `## Lessons` (mistakes caught and how they were fixed, `- [ ] <date> <stage>: tried → happened → do instead`; `/videos:learn` folds them into the skills or the project's notes and ticks them `- [x] … → <file>`) · `## Log` (`videos.py set` appends `- 2026-03-04 tighten: done …`).
 
 ## Kinds and their stages
 
@@ -94,4 +94,6 @@ Body: caption, hashtags, cover note, CTA link, claims checked. File names: lower
 | `new <slug> --title T --kind K [--ws W] [--campaign … --content … --talent … --style … --code … --media … --resolve … --next …]` | creates the record, `cut/`, `checks/`; workspace = `--ws`, else the one you are in |
 | `set <slug> <stage\|key> "<value>" [--next "…"]` | sets a stage status (validated) or any field, appends a log line |
 | `note <slug> "<text>"` | dated line under `## Notes` |
+| `lesson <slug> <stage\|any> "<tried> → <what happened> → <do instead>"` | open lesson under `## Lessons` |
+| `lessons [--ws W] [--all]` | open lessons across records (`--all` adds folded ones) |
 | `release <slug>` | creates `artifacts/videos/<slug>/release.md` from the record + a row in `index.md` |
