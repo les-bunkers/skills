@@ -9,10 +9,14 @@ Modes (one per MCP call; each stays well under 60 s for a 20-min cut):
   import          every source's program file + angle files (+ audio_files) into <root_bin>/Rushes/<source id>
   multicam        one multicam clip per source with angles (program = angle 1, synced on audio); clips renamed
                   "1 <id> program", "2 <id> <angle>" ... because Resolve orders angles by clip NAME
-  build           timeline from the cut list. Rough list: V1 multicam (or program file), linked sound; V2 face angle
-                  on face segments. Tight list (has v_in_f): V1 picture and A1 sound appended apart (J-cuts: sound
-                  before picture), sub-frame audio edges + 1-frame "Cross Fade +3 dB" on in-the-voice cuts, V2 face,
-                  V3 camera switches. Subtitles (the cut list's srt) first, then the cut list's markers.
+  build           timeline from the cut list. Rough list: V1 multicam (or program file), linked sound. Tight list
+                  (has v_in_f): V1 picture and A1 sound appended apart (J-cuts: sound before picture), sub-frame audio
+                  edges + 1-frame "Cross Fade +3 dB" on in-the-voice cuts. Subtitles (the cut list's srt) first, then
+                  the cut list's markers. Face segments and camera switches = the multicam's ACTIVE ANGLE on V1 (a
+                  camera change is never another camera's clip on a track above): placed as angle clips on V2 / V3,
+                  then turned into V1 angle switches in place by resolve_multicam_angles.switch_angles (from_tracks,
+                  .drt round trip, verified; result "angles"). On failure the V2 / V3 clips stay (picture unchanged)
+                  and "angles" says why. ARGS camera_tracks = True keeps V2 / V3 (old layout).
   review_markers  one marker per tighten cut that needs ears (colours below) + Lavender at every J join
   inspect         V1/A1 items of the named timeline vs this cut list's plan: same = no hand edits, safe to rebuild
   read_cuts       the named timeline's A1 items as they are now -> Cut list on source frames (ARGS out = path):
@@ -21,7 +25,7 @@ Never deletes: a timeline with the same name -> error, unless ARGS["replace"] = 
 timeline and page are restored after a build.
 
 ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name, default the cut list's), replace,
-out (read_cuts).
+out (read_cuts), camera_tracks (build).
 edit.json "resolve": {"root_bin": "Shoot 2026-03-02"} = top media-pool folder (default "Edit"). Review colours:
 Fuchsia phrase trim on a soft dip · Sand timed filler on a soft dip · Sky filler cut inside the voice (listen first)
 · Pink phrase trim (check meaning) · Mint timed filler · Cyan breath glued to a word · Lavender J-cut.
@@ -293,7 +297,19 @@ def run_in_resolve(resolve, project, args):
         if tl is None:
             return {"error": f"no timeline {name!r}"}
         st = tl.GetStartFrame()
-        got = {"V1": [(i.GetStart() - st, i.GetEnd() - st) for i in tl.GetItemListInTrack("video", 1) or []],
+
+        def joined(items):  # an angle switch cuts a V1 part into pieces with continuous source frames: join them back
+            out = []
+            for i in items:
+                a, b, lo = i.GetStart() - st, i.GetEnd() - st, i.GetLeftOffset()
+                mpi = i.GetMediaPoolItem()
+                mid = mpi.GetUniqueId() if mpi else None
+                if out and out[-1][1] == a and out[-1][3] == mid and abs(out[-1][2] + (out[-1][1] - out[-1][0]) - lo) < 1e-6:
+                    out[-1][1] = b
+                else:
+                    out.append([a, b, lo, mid])
+            return [(a, b) for a, b, _, _ in out]
+        got = {"V1": joined(tl.GetItemListInTrack("video", 1) or []),
                "A1": [(i.GetStart() - st, i.GetEnd() - st) for i in tl.GetItemListInTrack("audio", 1) or []]}
         if pl["tight"]:
             want_v = [(round(x["recordFrame"]), round(x["recordFrame"]) + x["endFrame"] - x["startFrame"]) for x in pl["pic"]]
@@ -398,18 +414,31 @@ def run_in_resolve(resolve, project, args):
         if pl["cams"]:
             tl.AddTrack("video")
             mp.AppendToTimeline(items(pl["cams"], ("mediaType",)))
-            tl.SetTrackName("video", 3, "Cameras (delete a piece = back to program / face)")
+            tl.SetTrackName("video", 3, "Cameras (angle clips, before the switch to multicam angles)")
     any_mc = any(x["clip"][0] == "mc" for x in pl["pic"] + pl["linked"])
-    tl.SetTrackName("video", 1, "Multicam (active angle = program)" if any_mc else "Program")
-    tl.SetTrackName("video", 2, "Face on hooks/outros (delete if you change the angle)")
+    to_angles = any_mc and bool(pl["face"] or pl["cams"]) and not args.get("camera_tracks")
+    tl.SetTrackName("video", 1, ("Multicam (active angle per piece)" if to_angles else "Multicam (active angle = program)")
+                    if any_mc else "Program")
+    tl.SetTrackName("video", 2, "Face (angle clips, before the switch to multicam angles)")
     tl.SetTrackName("audio", 1, "Sound (J-cuts: sound before picture)" if pl["tight"] else "Sound")
     for m in pl["markers"]:
         tl.AddMarker(m["frame"], m["color"], m["name"], m.get("note", ""), 1)
+    angles = None
+    if to_angles:  # camera changes = the multicam's active angle on V1, never camera clips on a track above it
+        import importlib
+        import resolve_multicam_angles as MA
+        importlib.reload(MA)  # Resolve's interpreter keeps modules between calls
+        r = MA.switch_angles(resolve, project, name, from_tracks=True, inplace=True)
+        angles = {k: r[k] for k in ("ok", "error", "converted", "left", "skipped", "items_split", "angles_set",
+                                    "sync_frames", "diff", "n_wrong", "steps") if k in r}
+        tl = MA._find_timeline(project, name) or tl
+        st = tl.GetStartFrame()
     v1 = tl.GetItemListInTrack("video", 1) or []
     a1 = tl.GetItemListInTrack("audio", 1) or []
     report = {"timeline": name, "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
-              "V2": len(tl.GetItemListInTrack("video", 2) or []),
+              "V2": len(tl.GetItemListInTrack("video", 2) or []) if tl.GetTrackCount("video") >= 2 else 0,
               "V3": len(tl.GetItemListInTrack("video", 3) or []) if tl.GetTrackCount("video") >= 3 else 0,
+              "angles": angles,
               "plan": summary(pl), "subs": len(tl.GetItemListInTrack("subtitle", 1) or []) if tl.GetTrackCount("subtitle") else 0,
               "markers": len(tl.GetMarkers() or {}), "glide": glide, "replaced": bool(old)}
     back = next((t for t in timelines() if t and prev_name and t.GetName() == prev_name), None)
@@ -435,10 +464,13 @@ def _cli():
     ap.add_argument("--replace", action="store_true", help="snippet: replace a same-name timeline (inspect first)")
     ap.add_argument("--json", help="dry run: write the full plan here")
     ap.add_argument("--out", help="snippet, read_cuts: where Resolve writes the read-back Cut list")
+    ap.add_argument("--camera-tracks", action="store_true",
+                    help="snippet, build: keep face / camera clips on V2 / V3 instead of multicam angle switches on V1")
     a = ap.parse_args()
     if a.snippet:
         args = {"mode": a.mode, "project": str(Path(a.project).resolve()), "cuts": str(Path(a.cuts).resolve()) if a.cuts else None,
-                "name": a.name, "replace": a.replace, "out": str(Path(a.out).resolve()) if a.out else None}
+                "name": a.name, "replace": a.replace, "out": str(Path(a.out).resolve()) if a.out else None,
+                "camera_tracks": a.camera_tracks}
         me = str(Path(__file__).resolve())
         print(f"g = dict(globals()); g['ARGS'] = {json.dumps(args, ensure_ascii=False)}; g['__file__'] = {me!r}\n"
               f"exec(open({me!r}, encoding='utf-8').read(), g); result = g['result']")

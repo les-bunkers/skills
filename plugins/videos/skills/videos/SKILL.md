@@ -56,6 +56,7 @@ Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROO
 - Grade per set: a look never crosses shoots or sets (lighting differs).
 - One render chain at a time; check free RAM first (< 4 GB → wait). Background jobs longer than ~10 min get a periodic check that they are still moving.
 - NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's.
+- Camera changes on a multicam edit = the multicam clip's active angle, never another camera's clip on a track above it (Resolve: `scripts/resolve_multicam_angles.py`).
 - Review pages for the human run on localhost (`python -m http.server --bind 127.0.0.1 <port>`); stop servers by their PID.
 - Never modify source media. Heavy media (rushes, masters, renders, HyperFrames projects) goes under `media_root`; the project keeps records, cut data, reports and upload-ready finals.
 - Before publishing, check the picture for readable secrets (passwords, Wi-Fi keys, emails, phone numbers, client screens): video CI scans finals for them, `/videos:qc` has the procedure for screen recordings.
