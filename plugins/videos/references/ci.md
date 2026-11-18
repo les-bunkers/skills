@@ -43,7 +43,7 @@ Auto: an image → `generated`; portrait or under 3 min → `short`; else `maste
 | `generated` | AI keyframe, storyboard, take | readable, no audio needed; black flags | `generated`: stray text, object wiping across the frame; hands as information |
 | `preview` | rough cut, timeline export, low-res review render | everything flags, nothing fails | `secrets` |
 
-Tech checks ignore the first and last 0.5 s (fades). A missing var turns that check amber ("not checked: pass --var hook"), never green.
+Tech checks ignore the first and last 0.5 s (fades). A missing var turns that check amber ("not checked: pass --var hook"), never green. A video that by design has none of an element (a teaching video with no call to action) passes `--var cta=-`: the check is skipped and reported as info; say why in the record's `## Decisions`.
 
 ## Transitions, phone size, soft checks
 

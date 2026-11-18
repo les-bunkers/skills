@@ -260,8 +260,13 @@ def visual_checks(path, prof, dur, cli_vars, var_files, max_cost, frames_dir, us
     path = str(Path(path).resolve())
     skip, out = set(), []
     for c in spec["checks"]:
-        missing = [n for n in re.findall(r"\{([A-Za-z_][\w.]*)\}", c.get("ask", "")) if n not in cli_vars
-                   and not any(n.startswith(f + ".") for f in var_files)]
+        names = re.findall(r"\{([A-Za-z_][\w.]*)\}", c.get("ask", ""))
+        absent = [n for n in names if cli_vars.get(n) == "-"]
+        if absent:  # --var cta=- : this video has none (teaching video without a call to action)
+            skip.add(c["id"])
+            out.append(check(c["id"], "info", f"skipped: --var {absent[0]}=- (this video has none)", tier="visual"))
+            continue
+        missing = [n for n in names if n not in cli_vars and not any(n.startswith(f + ".") for f in var_files)]
         if missing:
             skip.add(c["id"])
             if not (prof == "clip" and missing == ["cta"]):  # clips often end without a call to action
@@ -397,7 +402,8 @@ def main(argv=None):
     ap.add_argument("--profile", default="auto", choices=["auto", *PROFILES])
     ap.add_argument("--slug", help="video record: reports go to its checks/ci/ and feed the videos.py gate")
     ap.add_argument("--stage", choices=CI_STAGES, help="stage these files belong to (with --slug)")
-    ap.add_argument("--var", action="append", help="name=value for the pack ({hook}, {cta})")
+    ap.add_argument("--var", action="append", help="name=value for the pack ({hook}, {cta}); name=- = the video "
+                    "has none (skips that check as info)")
     ap.add_argument("--vars", action="append", help="name=file.json: its keys become {name.key}")
     ap.add_argument("--out", help="report folder without --slug (default: <file folder>/ci)")
     ap.add_argument("--max-cost", type=float, default=0.50, help="skip the visual tier (amber) above this estimate per file")
