@@ -45,7 +45,7 @@ One JSON file per batch, next to the work. `clips.local.json` beside it is merge
 | ranges | first match: `cuts` (Cut list file, its segments in order) · `ranges` (`[[in, out], …]`) · `in` + `out` (or `from_text` + `to_text`, optional `near` seconds to pick the occurrence, `lead` 0.15 / `tail` 0.3 s pads that never reach into the neighbouring word) minus `trims` (`[[a, b], …]`), after `prepend` ranges (a cold open) |
 | `hook` | frame-0 text, `"Lead *tone-2 phrase*"`; empty = no hook, captions from 0 s |
 | `rank` | posting order inside an episode and lane |
-| `topic` | one sentence: what the clip claims (prompt + review page) |
+| `topic` | one sentence: the clip's subject (prompt + review page); never quote its lines: prompt words come back in the OpenAI transcript |
 | `post`, `hashtags` | caption text and hashtags for the post (export, review page) |
 | `account` | posting lane (default `main`) |
 | `tags` | themes; one never repeats within `tag_gap` slots of a lane |

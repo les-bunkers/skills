@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from vc_config import FFMPEG, FFPROBE, OUT_H, OUT_W, Batch, fps_arg  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 SCALE = "flags=lanczos"
 SHARP = "unsharp=5:5:0.45:5:5:0.0"
 SR = 48000

@@ -1,6 +1,6 @@
 # Learning from past mistakes
 
-How `/videos:learn` reads past work and where each lesson goes. The method was first used to build [resolve](resolve.md) from 18 sessions of Resolve work: about 830 tool calls, six parallel readers, ~210 findings, ~75 of them new or only partly documented, plus a script bug none of the docs had caught (cross fades read back as unknown clips).
+How `/videos:learn` reads past work and where each lesson goes. The method was first used to build [resolve](resolve.md) from 18 sessions of Resolve work: about 830 tool calls, six parallel readers, ~210 findings, ~75 of them new or only partly documented, plus a script bug none of the docs had caught (cross fades read back as unknown clips). The first whole-pipeline run read 136 sessions (4,800 calls, 800 flagged) with nine readers: ~570 findings, ~150 of them new, partly documented or contradicting a doc, and seven script bugs (captions hidden at a float boundary, a content check that failed every dual-mono master, a camera rotation that never came back to the face camera, stale track names, missing stderr encoding in 30 scripts, a clip check that skipped transitions, a merge the plugin never got). Most new lessons were about coordination and the tools around the NLE (ffmpeg, the HTML renderer), not the NLE itself.
 
 ## Inputs
 
@@ -44,6 +44,9 @@ One reader agent per group of `groups.json`, all launched in one message. Each r
 | edit engine formats, detectors, measurements | [engine](engine.md) |
 | video CI checks and thresholds | [ci](ci.md) · visual asserts: [decide](decide.md) |
 | graphics layers and compositing | [layers](layers.md) |
+| ffmpeg commands and filters | [ffmpeg](ffmpeg.md) |
+| several agents, sessions or the human on one project: claims, shared scripts, locks, briefs, reports | [working](working.md) |
+| installing a tool, environment variables, project config | [setup](setup.md) |
 | records, statuses, the board, publishing | [records](records.md) or the house rules in `skills/videos/SKILL.md` |
 | audio cleanup, vertical clips, breath detection | the companion plugin's skill or reference |
 | the human's taste: pacing, framing, captions, colour, music, wording | the project's style files (the record's `style:`) |

@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from vc_config import FFMPEG, Batch, jload  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 INDEX_HEAD = ("Published videos. One folder per video (release.md + upload-ready files); how it was made = `source:` in "
               "release.md.\n\n| Video | Campaign | Formats | Status | Record |\n|---|---|---|---|---|\n")
 FIELDS = ["title", "slug", "campaign", "content", "source", "formats", "platforms", "post_date", "status", "posted",

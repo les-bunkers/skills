@@ -100,7 +100,7 @@ checks/joins.json, checks/master.json                                     join_c
  "end_note": "what was cut and why"}
 ```
 
-Anchor = (approx second on the words clock, phrase). Matching is on accent-stripped letters, starting on a word boundary, nearest to the approx time within ±12 s; `*` = any one word. Pads 0.12 s in / 0.25 s out, clamped to the midpoint with the neighbour word, then floor/ceil to frames. Options: `face`, `alt` (placed after a 2 s gap at the end, Purple marker), `head` / `tail` (pads), `why`. Marker colours used: Blue chapters · Green short candidates · Yellow claims to check · Red end of cut (+ what was cut) · Purple alternates.
+Anchor = (approx second on the words clock, phrase). Matching is on accent-stripped letters, starting on a word boundary, nearest to the approx time within ±12 s (an elided token is ONE word: « qu'on a des » matches, « on a des » inside « qu'on » does not; start the anchor at the whole token); `*` = any one word. Pads 0.12 s in / 0.25 s out, clamped to the midpoint with the neighbour word, then floor/ceil to frames. Options: `face`, `alt` (placed after a 2 s gap at the end, Purple marker), `head` / `tail` (pads), `why`. Marker colours used: Blue chapters · Green short candidates · Yellow claims to check · Red end of cut (+ what was cut) · Purple alternates.
 
 ## Cut lists
 
@@ -143,12 +143,12 @@ Never cut: voice the transcript has no words for (`speech?`): listed under "Kept
 
 ## How tighten hears (detector, not taste)
 
-Source audio high-passed at 80 Hz (chair rumble read as voice otherwise), 16 kHz, 30 ms Hann windows every 10 ms → dB, pitch periodicity (window-corrected autocorrelation, 70–300 Hz), spectral centroid. Floor = 5th percentile; silence < floor + 10 dB.
+Source audio high-passed at 80 Hz (chair rumble read as voice otherwise), 16 kHz, 30 ms Hann windows every 10 ms → dB, pitch periodicity (window-corrected autocorrelation, 70–300 Hz), spectral centroid. Floor = 5th percentile; silence < floor + 10 dB. A mix gated only part of the time (a podcast where a gate or an editor muted some pauses) puts the 5th percentile in the muted stretches, 15–30 dB under the room tone of the other pauses: nothing else counts as silence and tighten cuts no pause or breath there (0 cuts on three clips of such a mix). Check the report's floor against the level of a real pause; when they differ, cut those pauses by hand or tighten the ungated per-speaker tracks.
 
 - Between two words, the word's tail and the next onset never count. Each other sound between silences: **filler** = one held voiced vowel (loud core unbroken ≥ 0.18 s, centroid sd < 200 Hz, ≤ 1.2 s); **speech?** = voiced with syllable dips (kept); **breath** = aperiodic, centroid > 700 Hz, ≥ 80 ms, ≥ 8 dB under speech; **noise** = the rest (mouth clicks count as dead air). An energy + zero-crossing v1 took rumble for voice and word-final « s » for breath: 327 cuts on the test video, many wrong; this detector: 117.
 - Ears breath spans (PE-A-Frame "a person inhaling sharply" ≥ 0.95; precision 0.98 / recall 0.93 against 116 hand labels vs 0.91 / 0.21 for the DSP alone) relabel noise as breath, add breaths under the silence threshold, cut word→breath→word with no silence between near-silent dips, and cut an inhale glued to the next onset when the stretch is unvoiced. Exhales into a word tail are never cut.
 - Timed fillers: the words transcript (Grok) wrote 12 of 20 hand-labelled « euh » and times its fillers up to 0.34 s off; Scribe heard 19 of 20. Each timed filler is cut from the previous word's end to the next word's start: on a clean dip (≤ floor + 18), else a soft dip (≤ floor + 30 and ≥ 12 dB under the local peak), else inside the voice (`glide`): splice at the level valley (≥ 6 dB) or the strongest spectral change near the word boundary, sample-exact audio edges and a 1-frame "Cross Fade +3 dB" (preferred in a blind listening test). Skipped when the words transcript has a real word there or a `speech?` sits beside it.
-- Cut edges snap to the quieter of the two frames around them (level centred on the boundary).
+- Cut edges snap to the quieter of the two frames around them (level centred on the boundary). A gap shorter than a frame (a 30 ms break before a false start) averages into voice at frame level, so a phrase trim there is refused; cut it by hand at the sample-level dip and run the join check on it (a hand cut at such a gap measured 32 dB, under the 35 dB mark).
 
 ## Results on the test video (regression)
 

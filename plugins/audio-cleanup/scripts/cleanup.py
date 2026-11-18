@@ -52,6 +52,7 @@ import numpy as np
 import soundfile as sf
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 HERE = Path(__file__).resolve().parent
 STEPS = ["prepare", "diarize", "split", "quality", "reuse", "finish", "master", "scan"]
 SR = 48000

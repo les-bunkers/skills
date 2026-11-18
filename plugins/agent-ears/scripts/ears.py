@@ -99,6 +99,7 @@ def write(dst, r, note):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Breath spans (PE-A-Frame) for speech files -> <stem>.ears.json.")
     ap.add_argument("audio", nargs="+", help="audio or video files (anything ffmpeg reads)")
     ap.add_argument("--out-dir", help="folder for <stem>.ears.json (the project or job folder, not the media folder)")

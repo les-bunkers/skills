@@ -81,7 +81,7 @@ Edge problems (another voice caught at a cut, a clip ending mid-sentence, dead a
  {"seg": 3, "drop": true, "why": "dead air"}]
 ```
 
-Shrink, drop or split only: extended audio has no transcript. `in_s`/`out_s` may move outward ≤ ~0.3 s when the word is already in the transcript (a clipped onset or last word). `--apply` remaps words.json onto the new ranges (each word through its own range, so a cold open replaying a later range stays put) and logs dropped words; `run_batch.py all ID` then re-plans and re-masters. Find the other voice by pitch on `<clip>/clip_16k.wav` (written by the paid review; two speakers in the measured batch sat at ~95–105 Hz and 155–210 Hz); STT speaker labels are unreliable at turn edges. The master fades every cut (8 ms inside the clip, 40 ms at its first in and last out).
+Shrink, drop or split only: extended audio has no transcript. `in_s`/`out_s` may move outward ≤ ~0.3 s when the word is already in the transcript (a clipped onset or last word). `--apply` remaps words.json onto the new ranges (each word through its own range, so a cold open replaying a later range stays put) and logs dropped words; `run_batch.py all ID` then re-plans and re-masters. Find the other voice by pitch on `<clip>/clip_16k.wav` (written by the paid review; two speakers in the measured batch sat at ~95–105 Hz and 155–210 Hz); STT speaker labels are unreliable at turn edges. Pitch trackers jump an octave: a ~90 Hz voice read at 180–200 Hz passed for the other speaker. Check the harmonics (or a second tracker), and when per-speaker tracks exist (a speaker split), decide from their levels instead. The master fades every cut (8 ms inside the clip, 40 ms at its first in and last out).
 
 Done when every clip has `stt_fixes.json` and its words.json reads right.
 
@@ -95,7 +95,9 @@ python "$VC/run_batch.py" sheets [IDS…]      # renders/sheet.jpg: one row of f
 python "$VC/qc_report.py"                    # every clip x look -> problems only, _review/qc.json
 ```
 
-Per clip and look: `9x16-<look>/` (HyperFrames project), `check-<look>.json`, `renders/<ID>_<look>.mp4`, `renders/raea-<look>.json` when raea is installed. Render ≈ 45 s per minute of clip per look. A render waits for `MIN_FREE_GB` (default 3) of free RAM, then skips.
+Per clip and look: `9x16-<look>/` (HyperFrames project), `check-<look>.json`, `renders/<ID>_<look>.mp4`, `renders/raea-<look>.json` when raea is installed. Render ≈ 45 s per minute of clip per look. A render waits for `MIN_FREE_GB` (default 3) of free RAM, then skips. `check-<look>.json` comes from `hyperframes check --at-transitions` (every tween start and end is sampled: 2,264 samples instead of 9 on a 3-minute clip), so a caption still leaving while the next one enters is caught before the render.
+
+A fix to anything the looks share (plan, master, words, caption rules) re-renders EVERY look that exists on disk, not only the one on the review page or already uploaded: `LOOKS="<every 9x16-* look>" run_batch.py final <ids>`. A look left behind keeps the old bug and ships it when the human picks it.
 
 QC, in this order:
 - `check-<look>.json` `"ok": true`. Lint warnings about unread caption lines (`line_unread`) and Studio editability are expected with speech captions.
@@ -143,7 +145,7 @@ python "$VC/export_finals.py" signal [EP1-03=editorial …] [--publish-dir <proj
 - ONE text band, seam ± 110 px (930–1150 at seam 1040), on every shot: on stacks the text covers the hard edge between panels, and it never jumps between shots (per-shot bands under the chin read as jumpy). While a stack is on screen a 300 px dark gradient runs across the seam. Singles' chins end ~850–910 px (p50–p90 of 279 shots), above the band.
 - Platform UI: Reels, Shorts and TikTok overlay the top bar and the bottom post text, buttons and audio row; y 168–1330 px stays clear on 1080×1920. The band and the hook sit inside it.
 - Hook = the thumbnail: frame 0, held `hook_s` (2.8 s) in the band, then captions take over. `*tone-2*` marks the accent phrase; 2 lines max, the break goes before the tone-2 phrase unless that shrinks the type > 15 %.
-- Grouping: speech-paced groups (≤ `max_chars`, ≥ `min_s`, closed at sentence ends and pauses ≥ 0.4 s); a group never ends on a weak word (articles, prepositions, pronouns: `vc_lang.WEAK`), lone words merge forward, else backward (gap < 0.8 s). Fillers are dropped (`vc_lang.CAPTION_DROP`).
+- Grouping: speech-paced groups (≤ `max_chars`, ≥ `min_s`, closed at sentence ends and pauses ≥ 0.4 s); a group never ends on a weak word (articles, prepositions, pronouns: `vc_lang.WEAK`), lone words merge forward, else backward (gap < 0.8 s). Fillers are dropped (`vc_lang.CAPTION_DROP`). A group left with < 0.2 s of screen time (bunched word times) merges into the next one, the last into the previous: skipping it hid its words in 22 clips. Verify captions on the built composition or on frames of the render, never on the group list before this step.
 - Apostrophes get side bearing: at weight 800 « L'IA » read « LIA ».
 
 Looks (`python "$VC/build_vertical.py" --list`; config `look_presets` adds your own, `{"base": "signal", "accent": "#00E0A0"}`):

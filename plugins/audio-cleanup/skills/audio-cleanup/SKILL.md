@@ -46,6 +46,16 @@ accept a model license on their behalf.
    source in/out at the clip fps. The result lists items, skipped, sources and used seconds per timeline.
    Skipped > 0 = multicam, compound or generated items (no file path): plan the timeline cut from the plain
    files, or decompose the multicam first. Re-planning a timeline replaces only that timeline.
+   **Mixdown route** (a tight multicam edit with sub-frame joins and cross fades, where rebuilding the cut from the
+   files would not match): render the dialogue track AS PLAYED and clean that one file. Timeline current,
+   `project.IsRenderingInProgress()` False → `LoadRenderPreset("Audio Only")` + `SetRenderSettings({"SelectAllFrames":
+   True, "TargetDir": "<job>/mixdown", "CustomName": "as_played", "ExportVideo": False, "ExportAudio": True,
+   "AudioFormat": "wav", "AudioCodec": "lpcm", "AudioSampleRate": 48000, "AudioBitDepth": 24})` → `AddRenderJob`,
+   `StartRendering([job])` (7 min of timeline in ~8 s), delete that job, restore the render format and page. Check
+   the file is a WAV of exactly the timeline's length. Then write `<job>/plan.json` by hand: one timeline, one item
+   `{"path": "<mixdown wav>", "rec_f": 0, "dur_f": N, "src_in_f": 0, "src_out_f": N, "clip_fps": <timeline fps>,
+   "src_in_s": 0, "src_out_s": N / fps}`, and continue with step 3. The master then belongs to that edit: any later
+   change to the cut → re-render the mixdown and rerun.
 3. **job.json** (optional, `<job>/job.json`):
    ```json
    {"split": ["<path substring of a two-speaker source>"],
@@ -86,7 +96,8 @@ accept a model license on their behalf.
    ```
    Adds stereo tracks "RE-USE" and "MASTER −14 LUFS" (+ "RE-USE — <speaker>" with SPLIT_TRACKS) mirroring the
    plan's TRACK items; media in bin "Audio cleanup — <job folder name>". The report must show
-   `position_mismatches` 0 and `max_source_time_error_s` 0.0 for every track. `ENABLE="none"` (default) leaves
+   `position_mismatches` 0 and `max_source_time_error_s` 0.0 for every track (mixdown route: 1 mismatch is expected,
+   the one long item against the multicam pieces; check that item spans 0..N frames instead). `ENABLE="none"` (default) leaves
    every existing toggle alone and adds the new tracks disabled, so toggle-based render checks by others keep
    working. `ENABLE="master"` turns the master on and every other audio track off: only when the user wants the
    master audible. Restores the open timeline and page. Re-running replaces those tracks. The MCP call caps at
@@ -133,12 +144,15 @@ Any input ffmpeg reads; output 48 kHz mono float WAV with the same length and ti
   regions-only diarization put 3–15× more words in the wrong track. Lossless gain-gated split (tracks sum to the
   mix), other voice ducked −30 dB, never muted (silence before a turn makes RE-USE overshoot the onset by
   10–15 dB). Overlapping speech stays in one track. Details: [speaker split](../../references/speaker-split.md).
+- Preview or mux of a mono master into a stereo file: `-af "pan=stereo|c0=c0|c1=c0"`, never `-ac 2`. ffmpeg's
+  upmix lowers each side 3 dB, so a −14 LUFS master reads −17.0 in the preview.
 - Never ride level into RE-USE (compressor or fixed gain before, undone after): tested, it lost more words than it
   saved. RE-USE behaviour, dropouts and license: [RE-USE notes](../../references/reuse.md).
 
 ## Limits
 
-- Multicam, compound and generated items are skipped (no file path).
+- Multicam, compound and generated items are skipped (no file path): decompose, plan from the plain files, or take
+  the mixdown route (step 2).
 - One audio stream per source, channels averaged: separate mics belong on separate timeline tracks (plan that
   track) instead of a split. The split handles exactly two speakers; overlapping speech and backchannels stay in
   the owner's track and RE-USE may remove the second voice there.

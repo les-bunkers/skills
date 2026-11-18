@@ -1,6 +1,6 @@
 {
   "name": "agent-ears",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Lets an agent hear breaths (PE-A-Frame, local GPU) and fillers like « euh » / \"um\" plus audio events (ElevenLabs Scribe verbatim transcript, paid, cached) in speech, as files an editor or the videos tighten stage cuts from; plus a blind labelling page and stratified scoring kit to test any detector against human labels.",
   "author": {
     "name": "Les Bunkers",

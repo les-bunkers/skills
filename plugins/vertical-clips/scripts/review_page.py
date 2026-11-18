@@ -26,6 +26,7 @@ import build_vertical as BV  # noqa: E402
 from vc_config import FFMPEG, Batch, jload  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 def poster(mp4, jpg):

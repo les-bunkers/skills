@@ -10,12 +10,13 @@ disable-model-invocation: true
 ## Do
 
 1. Gate: `qc` is `done` and the human approved the final (look, text). Posting and ad publishing stay with the human.
+   Title and cover are locked before any platform posts: a reel once went out with the old title while the human was still choosing the new one. Post copy (caption, hook, title) says only what the final shows: check each promise against the cut before the render ships (post copy written before the shoot promised a 60 s shot that was never filmed, cameras that move when they only recrop, a file format the product does not make). `claims_check.py --text` covers numbers and claim words, not this.
 2. `videos.py release <slug>` → `artifacts/videos/<slug>/release.md` (filled from the record) + a row in `artifacts/videos/index.md`.
 3. Copy the shipped files in; names = lowercase letters, digits, hyphens: `<slug>-9x16.mp4`, `-16x9.mp4`, `-4x3.mp4`, `<slug>-cover.jpg`, `<slug>.srt`, and a share copy small enough to text:
    `ffmpeg -i <slug>-9x16.mp4 -c:v libx264 -preset slow -crf 23 -maxrate 2600k -bufsize 5200k -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart <slug>-share.mp4` (≈ 1 MB per 4 s).
    Files over ~100 MB stay under `media_root`; release.md links them.
 4. release.md: formats, platforms, post_date, caption + hashtags (from the content-hub item when linked, else written here in the project's brand voice; claims checked), loudness and qc lines, CTA link.
-5. Content hub linked (`content:` in the record) → update the item's status and copy through the hub's own tools.
+5. Content hub linked (`content:` in the record) → update the item's status and copy through the hub's own tools. A copy fix goes to every place that copy lives (review page, content hub, scheduler, release.md) in the same step: one fixed only in the scheduler left the typo on the review page.
 6. Ads: drafts only in whatever ad tool the team uses; the human publishes.
    Ad variants (`variants.py`): one ad draft per variant, same caption, audience, budget and placements, only the video differs, named `<slug>-<variant id>`. Fill the `## Variants` table of release.md from `<out>/variants.json` (id, hook text, CTA text, format, file, ad draft id; the base row is the control). The human publishes the drafts and calls the winner.
 7. `videos.py set <slug> publish "review <human>: ready in artifacts/videos/<slug>"`. After posting: release.md `status: posted`, `posted: ig=<url> yt=<url>`, then `videos.py set <slug> publish "done <date>"`.

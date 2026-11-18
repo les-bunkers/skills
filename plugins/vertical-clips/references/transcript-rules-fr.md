@@ -40,4 +40,4 @@ Write the prompt in French; it steers spelling and register. Config example:
                   "vocabulary": ["l'IA", "intelligence artificielle", "job", "business"]}
 ```
 
-`people` comes from the episode (« l'invité et l'animatrice »), `topic` from the clip.
+`people` comes from the episode (« l'invité et l'animatrice »), `topic` from the clip. Keep `topic` to the subject and never quote the clip's own lines in it: Whisper-family prompts act as the text before the audio, so words in the prompt come back as words in the transcript. A topic quoting « … où l'alcool était gratuit » made OpenAI write « où » where the speaker said « parce que », and on silent audio it returned the topic sentence. An OpenAI reading that matches the prompt's wording is a weak vote: decide from the other two and the audio.

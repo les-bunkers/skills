@@ -70,6 +70,7 @@ def run_in_resolve(resolve, args):
 def _cli():
     import argparse
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--timeline", action="append", default=[])
     ap.add_argument("--prefix")

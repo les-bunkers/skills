@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from vc_config import FFMPEG, SCRIPTS, Batch, fps_arg, jload, raea_bin  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 PY = sys.executable
 UV = os.environ.get("UV", "uv")
 HF = os.environ.get("HYPERFRAMES", "hyperframes")
@@ -153,7 +154,7 @@ def final(cid):
         proj, mp4 = d / f"9x16-{s}", d / "renders" / f"{cid}_{s}.mp4"
         if fresh(mp4, proj / "index.html", d / "assets" / "master.mp4"):
             continue
-        run(cid, f"check {s}", f"{HF} check --json", cwd=proj, out=d / f"check-{s}.json")
+        run(cid, f"check {s}", f"{HF} check --at-transitions --json", cwd=proj, out=d / f"check-{s}.json")
         chk = jload(d / f"check-{s}.json")
         if chk is None:
             say(f"    {cid} {s}: check json unreadable")

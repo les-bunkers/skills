@@ -129,6 +129,7 @@ def write(raw_path, dst=None, source=None, fillers=None):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Scribe raw JSON -> Words file with fillers and events typed.")
     ap.add_argument("raw", nargs="+", help="Scribe responses (<stem>.scribe.json)")
     ap.add_argument("--out", nargs="*", default=None, help="one output path per input (default <stem>.scribe.words.json)")

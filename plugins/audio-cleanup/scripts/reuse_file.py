@@ -32,6 +32,7 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "mamba_shim"))
 sys.path.insert(1, str(HERE))

@@ -32,6 +32,7 @@ import numpy as np
 import soundfile as sf
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 SR, NB = 48000, 200
 HERE = Path(__file__).resolve().parent
 FFMPEG = os.environ.get("FFMPEG", "ffmpeg")

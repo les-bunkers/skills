@@ -30,6 +30,7 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 RESOLVE_TOOL = "mcp__DaVinci_Resolve__"
 PIPE_CMD = re.compile(

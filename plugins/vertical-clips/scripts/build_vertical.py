@@ -6,7 +6,7 @@ in:  <clip>/assets/master.mp4 (clip_master.py), words.json (stt_reconcile.py --a
      clip "hook" in clips.json ("Lead *tone-2 phrase*"; no hook = captions from 0 s)
 out: <clip>/9x16-<look>/index.html + hyperframes.json + assets (hard-linked master and fonts), rewritten only when
      the content changed (keeps render freshness); <clip>/build-<look>.json (caption groups, band warnings). Render:
-     cd <clip>/9x16-<look> && hyperframes check --json && hyperframes render . --fps <fps> --output ../renders/<ID>_<look>.mp4
+     cd <clip>/9x16-<look> && hyperframes check --at-transitions --json && hyperframes render . --fps <fps> --output ../renders/<ID>_<look>.mp4
 
 Layout (1080x1920): stacks = main speaker in the top panel 1080 x seam, the other person below; hook and captions sit
 in ONE band centred on y = seam on every shot, so on stacks the text covers the hard edge between panels (plus a soft
@@ -28,7 +28,9 @@ from vc_config import OUT_H as H, OUT_W as W, SCRIPTS, Batch  # noqa: E402
 from vc_lang import table  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 SEAM_FADE = 300  # px: dark gradient across the seam while a stack is on screen (blends the panel edge)
+MIN_SHOW_S = 0.2 - 1e-6  # shortest caption group shown; shorter ones merge into a neighbour (float-safe at 0.2)
 FONT_DIR = SCRIPTS / "fonts"
 FONTS = {  # bundled, SIL Open Font License (OFL.txt beside each file)
     "Bricolage Grotesque": {"file": FONT_DIR / "BricolageGrotesque-latin.woff2", "weight": "200 800"},
@@ -305,6 +307,21 @@ def build(b, clip_id, looks):
             return f'<div class="band-slot" style="top: {top}px; height: {bot - top}px">'
 
         groups = [g for g in phrase_groups(words, st["min_s"], st["max_chars"], weak) if g[-1]["end"] > hook_s]
+        # a group with < 0.2 s of screen time (the next one starts right after it: bunched speech-to-text times) used
+        # to be skipped below, so its words never showed (22 clips lost 1-15 groups) -> merge it into the next group,
+        # the last one into the previous. Both tests use MIN_SHOW_S on rounded times: a group of exactly 0.2 s passed
+        # here unrounded (0.2000001) and failed the skip test rounded (0.1999999), so « Fait que là » never showed
+        i = 0
+        while i < len(groups) and len(groups) > 1:
+            gs0 = round(max(hook_s, groups[i][0]["start"] - 0.05), 3)
+            nxt0 = round(groups[i + 1][0]["start"] - 0.05, 3) if i + 1 < len(groups) else D
+            if min(nxt0, D) - gs0 >= MIN_SHOW_S:
+                i += 1
+            elif i + 1 < len(groups):
+                groups[i:i + 2] = [groups[i] + groups[i + 1]]
+            else:
+                groups[i - 1:i + 1] = [groups[i - 1] + groups[i]]
+                i -= 1
         parts, js = [], []
         stacks = []  # stack shots on screen (adjacent ones merged) -> seam gradient
         for a, z, lay, _ in sfaces:
@@ -328,7 +345,7 @@ def build(b, clip_id, looks):
             gs = round(max(hook_s, g[0]["start"] - 0.05), 3)
             nxt = groups[gi + 1][0]["start"] - 0.05 if gi + 1 < len(groups) else D
             ge = round(min(max(g[-1]["end"] + 0.25, gs + 0.4), nxt, D), 3)
-            if ge - gs < 0.2:
+            if ge - gs < MIN_SHOW_S:
                 continue
             gid = f"cap-{gi}"
             spans = []

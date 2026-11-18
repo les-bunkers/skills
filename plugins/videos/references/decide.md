@@ -81,8 +81,8 @@ Video is sampled by the API at about 1 frame per second, so anything frame-accur
   {"id": "hook_text", "sample": "opening", "ask": "The large headline text on screen reads «{hook}».", "expect": ">=0.6"},
   {"id": "caption_off_face", "sample": "spread",
    "ask": "A line of on-screen text is placed over the middle of the speaker's face, hiding part of it.",
-   "yes": "letters sit directly on the face (eyes, nose, mouth or beard)",
-   "no": "all text is below the chin, above the head, or there is no face",
+   "yes": "letters cover the eyes, the nose or the mouth",
+   "no": "all text is below the mouth (on the beard, chin, neck or chest), above the head, or there is no face",
    "expect": "<0.4"},
   {"id": "graded", "sample": "grade", "agg": "majority", "ask": "...", "expect": ">=0.42"},
   {"id": "layout", "sample": "spread", "ask": "Which layout is on screen?",
@@ -118,7 +118,7 @@ What the calibrations showed:
 | Check | Result |
 |---|---|
 | Hook text present and correct, CTA text in the last second | 0.83–0.88 on correct text, 0.12–0.16 when cut or when the expected text changed |
-| Caption over a face | caught a caption moved onto the face on 2 shorts; on 24 finished shorts it flagged 1 caption sitting on the chin and 2 touching the beard (borderline, for the human) |
+| Caption over a face | caught a caption moved onto the face on 2 shorts; on 24 finished shorts it flagged 1 caption sitting on the chin and 2 touching the beard (borderline, for the human). Later batches: 6+ reds at 0.50–0.58 on captions under the mouth, all accepted, so the wording now puts beard, chin and chest on the `no` side (2026-11-18, not yet recalibrated) |
 | Face cut by the frame edge | reframe off by 250 px: 0.85 vs at most 0.42 on whole faces |
 | Grade lost | 0.09–0.16 vs 0.55–0.80 graded |
 | Password on screen | flagged the exact 20.0–26.0 s window (0.93–0.96), no false alarm on 24 shorts including a prompter screen full of text |

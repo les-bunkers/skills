@@ -370,7 +370,7 @@ class Project:
         return out
 
     def face(self, sid):
-        """(file, delay_f) of the angle shown on face parts (V2), or (None, 0)."""
+        """(file, delay_f) of the angle shown on face parts, or (None, 0)."""
         s = self.src(sid)
         name = s.get("face")
         if not name:

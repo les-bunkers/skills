@@ -8,7 +8,9 @@
   loudness  integrated loudness, true peak, LRA with ffmpeg ebur128 on the file's own audio (loudnorm reads ~0.3 LU
             low on a file with a silent tail); pass = --lufs +- --tol and true peak <= --tp
   --ref     instead of the cut-list rebuild, compare with a file already on the timeline clock (the mastered track
-            the audio stage made): render = a*ref at lag 0, a ~ 1 when that track alone plays
+            the audio stage made): render = a*ref at lag 0, a ~ 1 when that track alone plays, a ~ 1.414 (sqrt 2)
+            when a mono reference sits on a stereo track (rendered dual mono, +3.01 dB). --ref alone is enough
+            (hand-edited timelines have no cut list): the window then comes from the shorter of the two files
   content   (--cuts + --project) rebuild the expected sound for a window from the cut list and the source audio
             (sub-frame edges included), least-squares fit render = a*expected [+ b*--ref2] at lags +-200 samples:
             expect a ~ 1, lag 0. Catches a wrong track enabled, a mix of two tracks, a shifted edit. A render
@@ -60,6 +62,15 @@ def video(path):
                                     "-show_entries", "stream=codec_name,width,height,nb_read_packets,r_frame_rate", "-of", "json",
                                     str(path)], capture_output=True, text=True, check=True).stdout)
     return (pr.get("streams") or [{}])[0]
+
+
+def duration(path):
+    pr = subprocess.run([os.environ.get("FFPROBE", "ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of",
+                         "csv=p=0", str(path)], capture_output=True, text=True)
+    try:
+        return float(pr.stdout.strip())
+    except ValueError:
+        return 0.0
 
 
 def expected(P, cut, t0, dur):
@@ -126,23 +137,32 @@ def main():
         ok = i is not None and abs(i - a.lufs) <= a.tol and tp is not None and tp <= a.tp
         rows.append({"check": "loudness", "I": i, "TP": tp, "LRA": lra, "target": a.lufs, "ok": ok})
         ok_all &= ok
-    if cut and a.project:
-        P = E.Project(a.project)
-        fps = E.norm_fps(cut["fps"])
-        total = E.total_f(cut["segments"]) / fps
+    if a.ref or (cut and a.project):
+        if a.ref:  # the reference is on the timeline clock: no cut list needed (hand-edited timelines have none)
+            total = min(duration(a.master), duration(a.ref))
+        else:
+            total = E.total_f(cut["segments"]) / E.norm_fps(cut["fps"])
         dur = min(a.window, total)
         t0 = a.at if a.at is not None else max(0.0, total / 2 - dur / 2)
-        exp = decode(a.ref, t0, dur) if a.ref else expected(P, cut, t0, dur)
+        exp = decode(a.ref, t0, dur) if a.ref else expected(E.Project(a.project), cut, t0, dur)
         got = decode(a.master, t0, dur)
         n = min(len(exp), len(got))
         cols = [exp[:n]]
         if a.ref2:
             cols.append(decode(a.ref2, t0, dur)[:n])
         err, lag, coef = fit(got[:n], cols)
-        ok = abs(lag) <= 2 and err < 0.05 and (not a.ref or abs(coef[0] - 1) < 0.05) and (len(coef) < 2 or abs(coef[1]) < 0.05 * max(abs(coef[0]), 1e-9))
-        rows.append({"check": "content", "window_s": [round(t0, 2), round(t0 + dur, 2)], "lag_samples": lag,
-                     "coef": [round(float(c), 4) for c in coef], "residual": f"{err:.1e}", "ok": ok})
+        gain = float(coef[0])
+        # a mono reference on a stereo track renders dual mono: a = sqrt 2 (+3.01 dB), same content
+        gain_ok = not a.ref or abs(gain - 1) < 0.05 or abs(gain - 2 ** 0.5) < 0.07
+        ok = abs(lag) <= 2 and err < 0.05 and gain_ok and (len(coef) < 2 or abs(coef[1]) < 0.05 * max(abs(gain), 1e-9))
+        row = {"check": "content", "window_s": [round(t0, 2), round(t0 + dur, 2)], "lag_samples": lag,
+               "coef": [round(float(c), 4) for c in coef], "residual": f"{err:.1e}", "ok": ok}
+        if a.ref and abs(gain - 2 ** 0.5) < 0.07:
+            row["note"] = "a = sqrt 2: mono reference rendered dual mono on a stereo track"
+        rows.append(row)
         ok_all &= ok
+    else:
+        print("SKIP content: needs --ref (mastered track on the timeline clock) or --cuts + --project")
     for r in rows:
         print(("OK   " if r["ok"] else "FAIL ") + json.dumps(r, ensure_ascii=False))
     print("PASS" if ok_all else "FAIL")

@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 OUT_W, OUT_H = 1080, 1920
 # Reels / Shorts / TikTok overlay UI leaves y 168-1330 px clear on a 1080x1920 frame (account bar on top, post text,
 # buttons and audio row below).

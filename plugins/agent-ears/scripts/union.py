@@ -69,6 +69,7 @@ def filler_rows(ws, model):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     import argparse
 
     ap = argparse.ArgumentParser(description="Union of every detector's spans -> candidates.json for labelling.")

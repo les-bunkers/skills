@@ -171,6 +171,7 @@ def boundary(st, ids, key):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     import argparse
 
     ap = argparse.ArgumentParser(description="Score every detector setting against key.json -> score.md / score.json.")

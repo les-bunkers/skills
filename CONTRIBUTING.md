@@ -35,7 +35,8 @@ A skill named `tighten` in plugin `videos` is `/videos:tighten`, or `/tighten` w
   # ///
   ```
   Stdlib-only scripts run with plain `python` too. GPU stacks (torch, pyannote, model weights) get a documented venv in `references/setup.md` with exact `uv` commands, including the CUDA wheel index.
-- Portable: `pathlib`, no drive letters or home paths, `sys.stdout.reconfigure(encoding="utf-8")` at the top, no Windows-only calls unless guarded. ffmpeg / ffprobe are found on PATH (env `FFMPEG`, `FFPROBE` override).
+- Portable: `pathlib`, no drive letters or home paths, `sys.stdout.reconfigure(encoding="utf-8")` and the same for `sys.stderr` at the top (agents run scripts with `python -I`, which ignores `PYTHONIOENCODING`; a Windows console is cp1252 and crashes on « — » or « ？ » in a path), no Windows-only calls unless guarded. ffmpeg / ffprobe are found on PATH (env `FFMPEG`, `FFPROBE` override).
+- Runs under `python -I`: a script that imports a sibling module puts its own folder on `sys.path` first (`-I` drops it); third-party packages go in the PEP 723 header (`# /// script` … `dependencies`) and the skill calls the script with `uv run` (`-I` also hides user site-packages).
 - Never modify source media. Outputs go to a job or project folder the user names.
 - Long jobs print progress and write a log next to their outputs; reruns skip finished steps (outputs newer than inputs).
 

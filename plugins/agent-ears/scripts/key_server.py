@@ -157,6 +157,7 @@ def handler(cfg, data, audio):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Blind labelling page for a bake-off job (localhost) -> key.json.")
     ap.add_argument("job", help="bake-off job folder with candidates.json (union.py)")
     ap.add_argument("--preview", type=int, default=0, help="show N candidates spread over detector combinations")

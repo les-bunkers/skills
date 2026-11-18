@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from vc_config import FFMPEG, FFPROBE, OUT_H, OUT_W, YUNET_SHA256, YUNET_URL, Batch  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 CUT_RATIO, CUT_MIN = 6.0, 4.0
 MIN_SHOT_S = 0.4
 FACE_IN_PANEL = 0.24  # stacked panel: face height / panel height (head + shoulders + mic)

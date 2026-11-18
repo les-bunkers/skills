@@ -29,6 +29,7 @@ HIGHPASS = {"raw": None, "hp80": 80}
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Respiro-en breath probabilities for a bake-off job -> probs_respiro.npz.")
     ap.add_argument("job", help="bake-off job folder (ears_job.py init)")
     ap.add_argument("--respiro-dir", default=os.environ.get("RESPIRO_DIR"), help="clone of ydqmkkx/Respiro-en")

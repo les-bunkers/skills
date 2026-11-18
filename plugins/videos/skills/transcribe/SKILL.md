@@ -11,11 +11,13 @@ argument-hint: "[video name]"
 1. A transcript already exists (studio subtitles JSON, a Grok / Scribe / OpenAI response, an SRT)? Import it, free:
    `python "$S/import_words.py" <transcript> --out cut/words/<id>.words.json --language fr`
    An SRT gives evenly spread word times: good for anchors, too coarse for tighten → transcribe properly before tightening.
-2. None → Grok speech-to-text. **Paid** (xAI bills per audio minute): run without `--yes` first, it prints files and minutes; ask the human with that number; then
+2. Keyterms first: the project's standing list (the speaker's name, the brand, its domain, products, tools named on camera) goes in edit.json `keyterms` before the FIRST paid run of every take. Takes sent without them came back with the speaker's own name and brand misheard, three sessions running.
+   None → Grok speech-to-text. **Paid** (xAI bills per audio minute): run without `--yes` first, it prints files and minutes; ask the human with that number; then
    `python "$S/stt_grok.py" --project cut/edit.json [--src A] --yes` (two voices: `--diarize`)
    → `cut/words/<stem>.grok.json` (raw response, the cache: never requested twice), `<stem>.words.json`, `<stem>.srt`. Env: `XAI_API_KEY`, `XAI_BASE_URL` (default `https://api.x.ai/v1`; a local key proxy works with a placeholder key). It sends `filler_words=true`: Grok drops « euh » / "um" by default, and tighten needs them.
 3. Point each source at its file in edit.json: `"words": "words/<…>.words.json"`, `"words_media"` = the file it was made on, `"captions"` = a hand-fixed SRT if one exists (its text survives every retime). Run `uv run "$S/sync.py" --project cut/edit.json --write` if `words_media` is not the program file.
 4. Read it: `python "$S/words_dump.py" --project cut/edit.json --src A --out cut/words/A.txt` (one line per sentence with its time). This is what `/videos:rough` anchors on.
+5. Dropouts: on long takes Grok can drop whole stretches of speech (43 s missing in a 75-min episode). Look for gaps of several seconds between words where the audio is still speech (the dump's pauses, or ears / RMS over the gap). Re-transcribe each such stretch from its own audio cut and splice it in. The splice offset is FITTED, never taken from the cut's file name or the requested start: median of (time here − time there) over words matched against another transcript of the same audio (YouTube auto-captions, Scribe, the studio subtitles). Unfitted splices sat ~3 s off.
 
 ## Fillers and breaths for tighten (agent-ears plugin)
 
@@ -23,7 +25,7 @@ Grok wrote only 12 of 20 hand-labelled « euh » and times its fillers up to 0.3
 
 ## Caption text
 
-The words transcript mishears rare names and products. Read the dump, list suspected misses with their times in the record (`videos.py note <slug> "captions: 'Ocean' at 04:12 = Notion"`) and fix them in the source SRT given as `captions` (hand fixes survive retiming), or on the subtitle track later. Add recurring names to `keyterms` for the next takes.
+The words transcript mishears rare names and products. Read the dump, list suspected misses with their times in the record (`videos.py note <slug> "captions: 'Ocean' at 04:12 = Notion"`) and fix them in the source SRT given as `captions` (hand fixes survive retiming), or on the subtitle track later. Fix per occurrence or per phrase, never a global word swap: a mishearing (« l'air » for « l'IA ») is also a real word elsewhere (« ça a l'air »). Add recurring names to `keyterms` for the next takes.
 
 ## Rule
 

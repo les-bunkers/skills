@@ -149,6 +149,7 @@ def stratum(c, weak_euh=WEAK_EUH):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="Create or show a bake-off job folder.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     i = sub.add_parser("init", help="write bakeoff.json (name, strata) + bakeoff.local.json (audio, words paths)")

@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 STAGES = ["brief", "generate", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "clips", "qc", "publish"]
 KINDS = {
     "talking-head": ["brief", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "qc", "publish"],

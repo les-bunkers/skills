@@ -31,6 +31,7 @@ from vc_config import FFMPEG, Batch, load_words, norm  # noqa: E402
 from vc_lang import table  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 OPENAI_MODEL = "gpt-4o-transcribe"
 
 

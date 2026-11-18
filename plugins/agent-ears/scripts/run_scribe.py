@@ -98,6 +98,7 @@ def transcribe(src, raw_path, a):
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description="ElevenLabs Scribe (paid) -> <stem>.scribe.json + <stem>.scribe.words.json.")
     ap.add_argument("audio", nargs="+", help="audio or video files (anything ffmpeg reads)")
     ap.add_argument("--out-dir", required=True, help="project or job folder for the outputs (not the media folder)")

@@ -533,6 +533,7 @@ def switch_angles(resolve, project, timeline, switches=(), from_tracks=False, ou
 
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     if len(sys.argv) != 2:
         sys.exit("usage: python resolve_multicam_angles.py <timeline.drt>")
     info = read_drt(sys.argv[1])

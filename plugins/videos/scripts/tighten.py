@@ -4,10 +4,12 @@
 # ///
 """Tighten a talking-head rough cut in the house edit style: breaths, fillers (« euh », "um") and dead air out, a spare
 sentence-initial word (French « donc ») out where it comes off cleanly, approved phrase trims cut on clean edges, tight
-pauses, J-cuts (sound 1-4 frames before picture) where the held picture stays silent, camera switches on V3.
+pauses, J-cuts (sound 1-4 frames before picture) where the held picture stays silent, camera switches (the multicam
+clip's active angle on V1, set by resolve_build).
 
 in:  --project edit.json (sources: file, words, ears, fillers, scan, angles), --cuts rough.cuts.json (Cut list),
-     overrides.json (keep_spare / drop_spare / drop_spans, word ids), style JSON (defaults = the house style below)
+     overrides.json (keep_spare / drop_spare / drop_spans: word ids; keep_air [[t0, t1]] and
+     cam_avoid [[t0, t1, angle]]: source s, per source), style JSON (defaults = the house style below)
 out: <out>.cuts.json (tight Cut list: parts with sound in/out + picture in/out, every cut, logs), <out>.srt (captions
      minus removed words, retimed), <out>.report.md (every cut with timeline time, spare-word, phrase-trim and filler
      tables, camera counts, voice kept because the transcript has no words there)
@@ -506,6 +508,11 @@ def removals(src, seg, words, tk, donc_log, flags, phrase_log, sc_euh=(), euh_lo
             "xa": xa if xa is not None and na == xa else None, "xb": xb if xb is not None and nb == xb else None}]
         out.sort(key=lambda x: x["a"])
         log["cut"] = "in the voice " + "+".join(glide) if glide else "tight " + "+".join(tight) if tight else "clean"
+    # keep_air {src: [[t0, t1], ...]} (source s): silences that carry the picture (a demo shown without words: light
+    # presets cycling, a screen changing) keep every removal out; dead-air rules hear only the sound
+    ka = OVR.get("keep_air", {}).get(src, [])
+    if ka:
+        out = [x for x in out if not any(x["a"] < b and a < x["b"] for a, b in ka)]
     return out
 
 
@@ -590,10 +597,9 @@ def cam_cycle(sid, face, cams):
 
 
 def plan_angles(segs):
-    """Camera switches -> s["angle"] per part, placed on V3 by resolve_build (V1 multicam program and V2 face stay
-    underneath: deleting a V3 piece goes back to them). No NLE API sets a multicam item's angle, hence V3 clips.
-      - face parts (hooks/outros): at a jump cut, after >= hold_s on one angle, rotate face / other / face / other
-        (face = no V3 piece, V2 shows it);
+    """Camera switches -> s["angle"] per part. resolve_build turns them into the multicam clip's ACTIVE ANGLE on V1
+    (.drt round trip; on failure the pieces stay as angle clips on V2 / V3 and its "angles" result says why).
+      - face parts (hooks/outros): at a jump cut, after >= hold_s on one angle, rotate face / other / face / other;
       - body where the program shows a screen (no camera correlates > screen_corr): a part >= min_s whose screen does
         not change page becomes a camera cutaway, at most one per gap_s, back to the screen after max_s;
       - program already on a camera (live switcher, keyed backgrounds): left alone;
@@ -617,6 +623,9 @@ def plan_angles(segs):
         face = P.src(s["src"]).get("face")
         cycle = cam_cycle(s["src"], face, cams)
         ok = {c for c in cams if max(sc["green"][c][k0:k1]) < CAM["green_max"]}
+        # cam_avoid {src: [[t0, t1, angle], ...]} (source s): an angle that shows the wrong thing in part of the take
+        # (empty table, the floor, a head cut off) -- the scan sees green screen only; set it from the angle sheet
+        ok -= {n for a, b, n in OVR.get("cam_avoid", {}).get(s["src"], []) if s["in_f"] / FPS < b and a < s["out_f"] / FPS}
         dur, t = (s["v_out_f"] - s["v_in_f"]) / FPS, s["v_rec_f"] / FPS
 
         def pick(name):
@@ -629,9 +638,12 @@ def plan_angles(segs):
             if face_since < -1e8:  # a face run opens on the face angle
                 face_i, face_since = 0, t
             elif t - face_since >= CAM["hold_s"] and dur >= CAM["face_min_part_s"]:
+                # back to the face angle is always possible (no piece = the base picture): on a take with no program
+                # file the face camera is not in the scan, so testing it against `ok` kept the rotation on side cameras
+                okf = ok | {face}
                 for _ in range(len(cycle)):
                     face_i = (face_i + 1) % len(cycle)
-                    if cycle[face_i] in ok:
+                    if cycle[face_i] in okf:
                         break
                 face_since = t
                 stats["face_switch"] += 1
@@ -811,7 +823,7 @@ def write_report(r, path):
         lines += ["", f"## Cuts inside the voice: {len(xs)} joins with sub-frame audio edges + a 1-frame Cross Fade +3 dB "
                   f"(A1); worst picture/sound offset {max(sy):.2f} frame ({max(sy) / FPS * 1000:.0f} ms)", ""]
     a = r.get("angles", {})
-    lines += ["", f"## Cameras (V3): {a.get('cutaway', 0)} cutaways from the screen, {a.get('face_switch', 0)} angle changes on face parts", ""]
+    lines += ["", f"## Cameras (multicam angle switches): {a.get('cutaway', 0)} cutaways from the screen, {a.get('face_switch', 0)} angle changes on face parts", ""]
     lines += ["", f"## Kept: voice where the transcript has no words ({len(r['flags'])}), maybe real words: listen", ""]
     for x in r["flags"]:
         lines.append(f"- {x['src']} {x['t']:.2f}: {x['between']} — {x['events']}")

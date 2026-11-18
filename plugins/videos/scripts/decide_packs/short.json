@@ -60,10 +60,10 @@
    "id": "caption_off_face",
    "sample": "spread",
    "ask": "A line of on-screen text is placed over the middle of the speaker's face, hiding part of it.",
-   "yes": "letters sit directly on the face (eyes, nose, mouth or beard)",
-   "no": "all text is below the chin, above the head, or there is no face",
+   "yes": "letters cover the eyes, the nose or the mouth",
+   "no": "all text is below the mouth (on the beard, chin, neck or chest), above the head, or there is no face",
    "expect": "<0.4",
-   "why": "calibrated per video (worst frame decides): clean shorts peak at 0.28, a caption moved onto the face peaks at 0.76; per frame AUC 1.00 on 31 labelled frames"
+   "why": "calibrated per video (worst frame decides): clean shorts peak at 0.28, a caption moved onto the face peaks at 0.76; per frame AUC 1.00 on 31 labelled frames. Wording 2026-11-18: beard below the mouth and chest = no (the old wording counted the beard: 6+ false reds at 0.50-0.58); recalibrate on captions under the mouth"
   },
   {
    "id": "face_in_frame",

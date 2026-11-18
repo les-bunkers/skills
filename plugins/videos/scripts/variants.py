@@ -56,6 +56,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 FFMPEG = os.environ.get("FFMPEG") or shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE = os.environ.get("FFPROBE") or shutil.which("ffprobe") or "ffprobe"
 HERE = Path(__file__).resolve().parent
