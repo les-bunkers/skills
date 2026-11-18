@@ -12,6 +12,8 @@ What switch_angles does (inside Resolve, through Blackmagic's Resolve MCP `run_s
   .drt -> check it equals the work copy (every item, sub-frame edge, transition, subtitle, marker, track name) and
   every V1 angle reads back as asked -> keep it (new timeline, or replace the original with inplace=True).
 The original is never touched before every check passed; on a failure the result is deleted and `error` says why.
+Needs zstd for compressed FieldsBlobs: stdlib on Python >= 3.14, else the `zstandard` package in the Python that runs
+Resolve's scripts (the inline dependency above only covers `uv run`). Neither there = `error` names it, nothing changes.
 
     import sys, importlib; sys.path.insert(0, "<plugin>/scripts")
     import resolve_multicam_angles as A; importlib.reload(A)          # reload: Resolve keeps modules between calls
@@ -56,12 +58,24 @@ try:
     def _z1(b):
         return _z.compress(b, level=3)
 except ImportError:  # pragma: no cover
-    import zstandard
+    try:
+        import zstandard
+    except ImportError:  # neither library: the import must still succeed, resolve_build loads this module mid-build
+        zstandard = None
+
+    def _need_zstd():
+        if zstandard is None:
+            raise RuntimeError(
+                "zstd missing: this Python is older than 3.14 and has no `zstandard` package. Install it into the "
+                "Python that runs Resolve's scripts (`<that python> -m pip install zstandard`), or keep the camera "
+                "clips on V2 / V3 (resolve_build: camera_tracks=True / --camera-tracks)")
 
     def _unz(b):
+        _need_zstd()
         return zstandard.ZstdDecompressor().decompress(b, max_output_size=1 << 20)
 
     def _z1(b):
+        _need_zstd()
         return zstandard.ZstdCompressor(level=3, write_content_size=True).compress(b)
 
 _CAM = re.compile(rb"\x1a\x08Camera \d")

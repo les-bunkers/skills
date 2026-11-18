@@ -425,14 +425,18 @@ def run_in_resolve(resolve, project, args):
         tl.AddMarker(m["frame"], m["color"], m["name"], m.get("note", ""), 1)
     angles = None
     if to_angles:  # camera changes = the multicam's active angle on V1, never camera clips on a track above it
-        import importlib
-        import resolve_multicam_angles as MA
-        importlib.reload(MA)  # Resolve's interpreter keeps modules between calls
-        r = MA.switch_angles(resolve, project, name, from_tracks=True, inplace=True)
-        angles = {k: r[k] for k in ("ok", "error", "converted", "left", "skipped", "items_split", "angles_set",
-                                    "sync_frames", "diff", "n_wrong", "steps") if k in r}
-        tl = MA._find_timeline(project, name) or tl
-        st = tl.GetStartFrame()
+        try:
+            import importlib
+            import resolve_multicam_angles as MA
+            importlib.reload(MA)  # Resolve's interpreter keeps modules between calls
+            r = MA.switch_angles(resolve, project, name, from_tracks=True, inplace=True)
+            angles = {k: r[k] for k in ("ok", "error", "converted", "left", "skipped", "items_split", "angles_set",
+                                        "sync_frames", "diff", "n_wrong", "steps") if k in r}
+            angles.setdefault("ok", False)
+            tl = MA._find_timeline(project, name) or tl
+            st = tl.GetStartFrame()
+        except Exception as e:  # the build stands: camera clips stay on V2 / V3, the report and the restore still run
+            angles = {"ok": False, "error": f"{type(e).__name__}: {e}"}
     v1 = tl.GetItemListInTrack("video", 1) or []
     a1 = tl.GetItemListInTrack("audio", 1) or []
     report = {"timeline": name, "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
