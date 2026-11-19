@@ -199,18 +199,23 @@ def archive(resolve, project, name, state=None, date=None):
     tl = timeline(project, name)
     if tl is None:
         return {"error": f"no timeline {name!r}"}
-    item = tl.GetMediaPoolItem()
-    if state is None:
-        state = _state(item, name)
-    n, new = _versioned(project, name, state, date)
-    r = move(resolve, project, [item], ARCHIVE)
-    if "error" in r:
-        return r
-    tl.SetName(new)
-    if tl.GetName() != new:
-        return {"error": "moved to the archive, rename failed", "name": new}
-    tag(item, name, "timeline", "archive", state, drop=PLACE_WORDS + STATES)
-    return {"archived": new, "version": n, "bin": ARCHIVE}
+    cur = project.GetCurrentTimeline()  # the human's current timeline stays theirs, whatever the calls below do
+    try:
+        item = tl.GetMediaPoolItem()
+        if state is None:
+            state = _state(item, name)
+        n, new = _versioned(project, name, state, date)
+        r = move(resolve, project, [item], ARCHIVE)
+        if "error" in r:
+            return r
+        tl.SetName(new)
+        if tl.GetName() != new:
+            return {"error": "moved to the archive, rename failed", "name": new}
+        tag(item, name, "timeline", "archive", state, drop=PLACE_WORDS + STATES)
+        return {"archived": new, "version": n, "bin": ARCHIVE}
+    finally:
+        if cur:
+            project.SetCurrentTimeline(cur)
 
 
 def file_name(item):

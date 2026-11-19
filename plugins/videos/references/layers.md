@@ -55,6 +55,32 @@ Next to the renders, `layers.json`: one entry per layer, `{"id", "file", "record
 - Blurs and redactions: a tracked window with a blur on the clip (Resolve Color page), not a baked copy.
 - Picture-in-picture of another camera: that camera's clip on a track above, cropped and scaled, as a PiP, never as a camera change (camera changes stay the multicam's active angle). The frame or card around the PiP is a layer.
 
+## Split section: the speaker moved aside, a side panel for the cards
+
+A run of cards on one topic (a list, a price breakdown, steps) reads better beside the speaker than over them. For the length of the run the picture moves to one side and an opaque panel takes the other third of the frame; the cards appear in it one after the other. Single cards between two runs stay floating layers, so the edit keeps two rhythms. The human's verdict on the first one (a 16:9 sales video), from a settled frame: "I really like this layout".
+
+```
+┌──────────────────────────────┬─────────────────┐
+│                              │ ▬▬▬▬▬ ───── ─── │  story bar: one segment per card of the run
+│          speaker             │ ┌─────────────┐ │
+│   nose at the centre of      │ │    card     │ │  the cards, one after the other
+│   this part of the frame     │ └─────────────┘ │
+│                              │ brand  campaign │  footer line
+└──────────────────────────────┴─────────────────┘
+            1216 px                   704 px          on a 1920 canvas
+```
+
+- Panel: 704 of 1920 px (37 %), full height, opaque, on the right. It carries its own wallpaper, a story bar at the top (one segment per card of the run, the current one filling over its clip), the card column (56 px padding) and a footer line (brand on the left, campaign on the right).
+- Picture: `pan = (W - PW) / 2 / W - nose_x`, in fractions of the frame width (`nose_x` = where the speaker's nose sits on the frontal camera, 0.555 on the first one), puts the nose at the centre of the part left visible. Keep `|pan| * W < PW`: the panel then always covers the strip the pan uncovers.
+- Clips: one alpha clip per card, abutting (card k runs from its first frame to the first frame of card k+1; the last one runs 8 frames past its card). The panel background is drawn in every clip, so it stays continuous across a handoff and only the card content changes.
+- Motion: the panel pushes in over 0.70 s on the first clip and out over 0.56 s on the last (`cubic-bezier(.7,0,.2,1)`, a little blur while it moves, a cast shadow on the picture). The picture pan runs on the same clock and the same curve, one key per frame while moving, so picture and panel move as one piece.
+- Timeline: a variant of the working timeline (`<Video> - panels`; [resolve](resolve.md) § Organization), never the working timeline itself. Two tracks on top: adjustment clips carrying the pan above every picture track, the panel clips above them. Inside a section, the floating cards with the same ids come off the variant.
+- The scripting API can't keyframe an adjustment clip: the pan keys go in through a DRT rewrite ([resolve](resolve.md) § Fusion, effects and templates).
+
+Checks: every shot inside a section is the frontal camera with the face near the centre (thumbnails across each span; a side camera inside a section → shorten the section or key another pan for that shot). No full-frame cutaway overlaps a section: the adjustment clip pans everything under it. After the import, composite stills at mid push-in, settled, a handoff, mid push-out and 2 frames after: the face on its part, no uncovered strip, normal framing back.
+
+Traps: a panel flush to the frame edge fails the title-safe lint → lint panel pages with the safe margin set to the panel padding, on the settled layout. A zoom on the card column multiplies slide distances (a 42 px entry at zoom 1.3 = 55 px, the whole padding) → cap slides at 40 px on screen. Prefix the panel's CSS classes and ids: card builders already use the short names. A subtitle track centred on the full frame runs under the panel → switch it off over sections, or give burned-in captions a position per section.
+
 ## After compositing
 
 The render comes from the NLE: the 16:9 master renders with the layers track enabled (`/videos:master`), each other format from its own timeline. Loudness and video CI run on those NLE renders, as for any final ([ci](ci.md)).

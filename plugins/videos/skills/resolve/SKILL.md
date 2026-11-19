@@ -28,7 +28,7 @@ else:
         ...  # the change; record what happened in `done`
     finally:
         if tl0: project.SetCurrentTimeline(tl0)           # None right after a relaunch
-        if page0: resolve.OpenPage(page0)
+        if page0 and resolve.GetCurrentPage() != page0: resolve.OpenPage(page0)
         mp.SetCurrentFolder(folder0)
     result = {"timeline": NAME, **done}
 ```
@@ -46,6 +46,7 @@ One Resolve serves every agent session and the human: one project, current timel
 
 - One agent changes Resolve at a time; the others read. Frame renders too: three agents rendering frames at once wedged the renderer for half an hour.
 - Nothing changes while a render runs (imports return `[]`, markers return False).
+- Nothing changes while the human is active in Resolve either, throwaway test timelines included: a timeline a script creates or duplicates becomes what they see, and changes made beside theirs have come back undone a minute later without an error. The log tells (`Application state changed to Active` with no later `Inactive`, page changes or saves between your calls). After a change, read the state back in a later call before reporting it done.
 - Never `DeleteAllRenderJobs`; delete only your own job ids after `Complete`. After a render, `OpenPage("edit")`: on Deliver, track toggles return True and change nothing.
 - Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. A big change starts with a snapshot of the timeline into the archive (below); delete only your own tests, and replace a build only after comparing the timeline with the last cut list (hand edits → ask).
 - `DuplicateTimeline` and `ImportTimelineFromFile` make the new timeline current: restore the previous one.
