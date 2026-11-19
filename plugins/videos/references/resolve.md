@@ -59,11 +59,88 @@ All sessions and the human share one Resolve: one open project, one current time
 
 Etiquette that follows: one agent changes Resolve at a time, the others read; every changing script saves and restores the current timeline, page, timecode, media-pool folder and render format; never open, close or switch projects while the human works.
 
+## Organization: where things go, what they are called
+
+One layout for every stage, every agent session and the human. `scripts/resolve_bins.py` holds it as code (`path_bin`, `move`, `snapshot`, `archive`, `multicam`, `tag`, `audit`); `resolve_build.py` and the audio cleanup file their output with it. A project the human organized another way on purpose keeps their layout: follow it and say so in the record.
+
+```
+01 Timelines/
+  WIP/Latest/      working timelines, plain name = the video        "Teleprompter demo"
+  WIP/Archive/     earlier versions                                 "Teleprompter demo v02 2026-03-04 rough"
+  Final/           approved cuts                                    "Teleprompter demo v05 2026-03-09 approved"
+  Scratch/         tests and throwaways
+02 Footage/
+  2026-03-02 Studio/           one folder per shoot: "<YYYY-MM-DD> <place or subject>"
+    <take or source id>/       camera files as shot; extra microphone files in its sub-bin "Audio"
+    Multicam/                  that shoot's multicam clips
+03 Assets/
+  Images/  Music/  SFX/        shared material
+  Videos/<Video>/[<set>/]      graphics, overlays, B-roll and screen recordings made for one video
+  Voice/<Video>/               cleaned, mastered or generated voice tracks
+  Subtitles/<Video>/           SRT items
+```
+
+The numbers keep the three bins in this order in every sort mode. Nothing sits at the pool root, there is no fourth top-level bin and no "/" in a bin name (`B.clean`).
+
+**Timeline names**
+
+- In Latest a timeline carries the video's plain name, the one the human says out loud. No date, version, stage or "final" in it: the name never changes while the cut does, so the record, scripts and the human's open tab keep pointing at the right thing.
+- Two variants waiting for the human's choice: `<Video> - <variant>` ("Teleprompter demo - split panels"), both in Latest until they pick one.
+- A frozen version: `<Video> vNN YYYY-MM-DD <state>`. NN is a whole number on two digits that counts up per video across Archive and Final and is never reused. The date is the day it was frozen. The state is one or two words: `rough`, `tight`, `graded`, `mastered`, `approved` (those five are read back from the timeline's keywords when no state is passed), or what the edit is about to change (`before captions`).
+
+**Before a big edit: snapshot**
+
+A rebuild, a restructure, a re-time, a pass over the whole timeline or anything hard to undo by hand starts with a snapshot. `DuplicateTimeline` makes a copy; the COPY takes the version name and moves to `WIP/Archive`; the current timeline is restored. One marker or one cut needs none.
+
+```python
+import sys, importlib; sys.path.insert(0, r"<plugin>/scripts"); import resolve_bins as B; importlib.reload(B)
+result = B.snapshot(resolve, project, "Teleprompter demo", "rough")   # {"snapshot": "Teleprompter demo v02 2026-03-04 rough", …}
+```
+
+- A rebuild from a cut list (`resolve_build.py` with `replace`) files the timeline it replaces in the archive the same way (`B.archive`): hand edits survive in that copy.
+- An approved cut: `B.snapshot(resolve, project, name, "approved", to=B.FINAL)`. For a delivered video also export the project (`pm.ExportProject(name, path)`) next to the master.
+- Nothing in Archive or Final is edited or deleted. Delete only your own tests in Scratch.
+
+**Clip names**
+
+- Camera and audio clips keep their file name as clip name. The name links the clip to the file on disk, the transcript and the sync data; a renamed pool is unreadable to the next person. The camera goes in the clip's `Angle` metadata, the take in `Take`, the scene in `Scene`. A multicam needs ordered names only while it is created (Multicam).
+- Footage bins mirror the shoot's folders on disk below the shoot level. Timelines and assets are filed by video.
+
+**Keywords and smart bins**
+
+- Every item carries keywords (`B.tag(item, …)`): the video's name, the shoot, and its kind. Kinds: `timeline` with `latest` / `archive` / `final` / `scratch` and the state; `camera`, `program`, `audio track`, `multicam`; `graphic`, `photo`, `reference`, `music`, `sfx`, `voice`.
+- Resolve lists one smart bin per keyword under Smart Bins → Keywords in the media pool (User preferences → Editing → Automatic Smart Bins → keywords; the list is hidden → media pool "…" menu → Show Smart Bins). A click on the video's name shows its timelines, footage and assets across all bins; a click on `latest` shows every working timeline.
+- A smart bin matches the keyword exactly as typed: use the words above, same spelling every time, and the video's name exactly as the working timeline carries it.
+- Smart bins with other rules have no scripting call: the human creates those.
+
+**Who files what**
+
+| Made by | Goes in | Name | Keywords |
+|---|---|---|---|
+| ingest: camera and program files | `02 Footage/<shoot>/<source id>` | file name | shoot, `camera` |
+| ingest: extra microphone files | `…/<source id>/Audio` | file name | shoot, `audio track` |
+| ingest: multicam clip | `02 Footage/<shoot>/Multicam` | `MC <source id>` | shoot, `multicam` |
+| rough, tighten: the build | `01 Timelines/WIP/Latest` | the video | video, `timeline`, `latest`, state |
+| rough, tighten: its SRT | `03 Assets/Subtitles/<Video>` | file name | none (refused) |
+| audio: cleaned and mastered tracks | `03 Assets/Voice/<Video>` | file name | video, `voice` |
+| layers, B-roll, screen recordings | `03 Assets/Videos/<Video>[/<set>]` | file name | video, `graphic` |
+| formats: another aspect ratio | `01 Timelines/WIP/Latest` | `<Video> - 9x16` | video, `timeline`, `latest` |
+| anything you are only trying | `01 Timelines/Scratch` | free | `scratch` |
+
+`result = B.audit(project)` after a stage that added things: it counts strays at the root, timelines outside `01 Timelines`, version names in Latest, archive names off the pattern, renamed footage clips and items without keywords. `ok` True = nothing to fix.
+
 ## Media pool and import
 
-- `mp.ImportMedia([path, …])` with plain path strings; it imports into the current folder → `mp.SetCurrentFolder(bin)` first.
+- `mp.ImportMedia([path, …])` with plain path strings; it imports into the current folder → `mp.SetCurrentFolder(bin)` first, with the bin the layout names (Organization; `resolve_bins.path_bin(mp, "03 Assets/Videos/<Video>")` finds or makes it), and restore the folder after.
   - ✗ **`ImportMedia([{"FilePath": p}])`** (the stub's dict form) → imports nothing.
   - ✗ **Importing while Resolve sits on Deliver or renders** → `[]` for every file type (`GetCurrentPage()` returns None mid-render); `MediaStorage.AddItemListToMediaPool` same → wait for `IsRenderingInProgress()` False, `OpenPage("edit")`, import, restore the page and `mp.SetCurrentFolder(folder0)`.
+- ✗ **`mp.MoveClips(items, folder)` and `mp.MoveFolders(folders, target)` returned True and copied** → every clip, timeline and bin appeared in the target under a new unique id while the originals stayed where they were (983 pool items became 1,945, 59 timelines became 118). Cause: Resolve's window still believed Alt was held, left over from an Alt+Tab away from it, and Alt-drag duplicates in the media pool. `resolve.Fusion().GetModifiers(True)` showed `AltModifier: True`; the page and the current folder made no difference → read the modifiers before any move, clear a stuck one with a click or a mouse move inside the Resolve window (a `WM_MOUSEMOVE` posted to the main window does it), and prove every move: the same `GetUniqueId()` sits in the target and the pool and timeline counts are unchanged (`resolve_bins.move` reads the modifiers and checks the ids; for a bin, `folder.GetParentFolder().GetUniqueId()`).
+  - Cleaning up after such a copy: every item whose id was absent from a pool listing taken before is a copy → `DeleteTimelines` the copy timelines first, then `DeleteClips`, then `DeleteFolders`. A timeline item that had no pool clip linked itself to the copy of its file while the copy existed, and went back to unlinked when the copy was deleted → compare the timelines' source ids with the listing afterwards.
+- A bin has no rename call → create the new bin, move the content (checked), delete the empty old one. `Folder.GetUniqueId()` and `GetParentFolder()` exist.
+- ✗ **`mp.AddSubFolder(parent, name)` with a name that exists** → no error: a second bin with the same name, and it becomes the current folder → look the bin up by name first and restore the current folder (`resolve_bins.path_bin`).
+- Keywords: `item.SetMetadata("Keywords", "a, b")`, one comma-separated string, read back with `GetMetadata("Keywords")`. ✗ **On Subtitle items** → False (56 of 56): they stay untagged, filed by bin only.
+- ✗ **`SetClipProperty("Clip Name", x)`** → returned False and the clip was renamed → read back with `GetName()`, never trust the return.
+- ✗ **`GetClipProperty("Usage")` to decide what is unused** → the count did not match the uses found by walking the timelines → walk every timeline's items and compare `GetMediaPoolItem().GetUniqueId()`.
 - ✗ **Overwriting an imported file on disk** → the pool item keeps the old content and length → `item.ReplaceClip(item.GetClipProperty("File Path"))` re-reads it.
 - `ReplaceClip(new)` swaps media under every cut when the frame count matches. ✗ **Guarding the swap on equal file size** → every WAV "differed" by 4 header bytes → compare ffprobe streams (type, codec, rate, channels, sample or frame count).
 - Relink after a drive move: `mp.RelinkClips(clips, folder)` per folder group, in batches, `SaveProject()` between batches. ✗ **2,500 clips in one call, then back-to-back heavy batches** → timeouts, then Resolve stopped responding and Windows closed it (App lifecycle).
@@ -74,7 +151,7 @@ Etiquette that follows: one agent changes Resolve at a time, the others read; ev
 
 ## Timelines
 
-- `CreateEmptyTimeline(name)` fails on an existing name → delete the old one only when your own build made it (`mp.DeleteTimelines([t])`); otherwise build under a new name. The timeline lands in the current media-pool folder.
+- `CreateEmptyTimeline(name)` fails on an existing name → the working timeline keeps the video's plain name (Organization): file the old one in the archive under its version name first (`resolve_bins.archive`), or delete it when it is your own test (`mp.DeleteTimelines([t])`). The timeline lands in the current media-pool folder → `mp.SetCurrentFolder(resolve_bins.path_bin(mp, "01 Timelines/WIP/Latest"))` before, restore after.
 - `ImportTimelineFromFile(drt)` names the timeline after the FILE, lands in the current bin, links existing media and becomes current.
 - Frame rate and resolution: project settings change only while the project has no timelines. Per timeline: on the new empty timeline `SetSetting("useCustomSettings", "1")`, then `timelineFrameRate`, `timelineResolutionWidth` / `Height` (works, e.g. a 1080×1920 timeline in a UHD project).
 - `AppendToTimeline([{mediaPoolItem, startFrame, endFrame, recordFrame, trackIndex, mediaType}])`:
@@ -116,7 +193,8 @@ Etiquette that follows: one agent changes Resolve at a time, the others read; ev
 
 - `mp.CreateMulticamClip(items, {"name", "angleSyncMode": resolve.MULTICAM_ANGLE_SYNC_AUDIO, "angleNameMode": resolve.MULTICAM_ANGLE_NAME_CLIP, "useFullClipExtents": True, "createBinForSourceClips": False, "frameRate": …})` → ~5 s for five 4K angles.
   - ✗ **Defaults** → sources moved into a new bin (`createBinForSourceClips` True) and the clip cut to the overlap of all angles.
-  - ✗ **Ordering the list** → ignored: angle order = clip NAME sort → rename the pool clips first (`SetClipProperty("Clip Name", "1 …")`; files untouched).
+  - ✗ **Ordering the list** → ignored: angle order = clip NAME sort → give the pool clips ordered names for the call (`SetClipProperty("Clip Name", "1 …")`; files untouched).
+  - ✗ **Leaving those ordered names on the clips** → 173 camera clips no longer showed which file they were, and every search by file name failed → the multicam keeps the angle names it was made with: after the clips got their file names back, timeline items still read `<multicam> - 2 <angle>` and a DRT export listed the same angles → rename, create, restore the file names in a `finally`, camera in the `Angle` metadata (`resolve_bins.multicam`).
 - Offsets: with full extents the multicam starts at the earliest angle → a source frame sits at `+ max(0, −min(d_a) × fps)` inside it (d_a = audio lag of angle a against the program). Check the multicam's frame count against the computed span; one frame off → compare thumbnails of both. ✗ **An audio cross-correlation window of ±0.5 s** → missed a 0.656 s lead → widen on failure.
 - No API call sets a multicam item's active angle.
   - ✗ **`PerformMulticamSmartSwitch` with explicit settings** → None in 0 s, nothing switched (one key is invalid, not isolated); `PerformMulticamSmartSwitch({})` → Resolve chooses the angles itself (77 s for 40 s of timeline).

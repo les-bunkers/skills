@@ -843,7 +843,7 @@ def main():
     ap.add_argument("--out", help="output prefix: writes <out>.cuts.json, <out>.srt, <out>.report.md")
     ap.add_argument("--style", help="style JSON (default: edit.json \"style\", else the house style)")
     ap.add_argument("--overrides", help="overrides JSON (default: edit.json \"overrides\")")
-    ap.add_argument("--name", help="timeline name (default: the rough name with rough -> tight)")
+    ap.add_argument("--name", help="timeline name (default: the rough cut list's name = the video's plain name)")
     ap.add_argument("--no-ears", action="store_true", help="ignore *.ears.json breath spans (DSP breaths only)")
     ap.add_argument("--no-fillers", action="store_true", help="ignore the timed-fillers transcript")
     ap.add_argument("--no-glide", action="store_true", help="never cut inside the voice")
@@ -870,7 +870,9 @@ def main():
     first = c["segments"][0]["src"]
     configure(style, c["fps"], P.language(first))
     rough = c.get("timeline") or Path(a.cuts).stem
-    name = a.name or (re.sub(r"rough( v\d+)?", "tight", rough, count=1) if "rough" in rough else rough + " — tight")
+    # one working timeline per video, plain name (resolve.md § Organization): the tight cut keeps the rough's name, without
+    # an old-style stage suffix; the build files the rough it replaces in the archive
+    name = a.name or re.sub(r"\s*[—–-]\s*rough( v\d+)?\s*$", "", rough) or rough
     r, cues = tighten(c, name)
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)

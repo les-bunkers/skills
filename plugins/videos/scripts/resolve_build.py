@@ -6,9 +6,13 @@ Exec snippet for run_script_unsafe (prints it): python resolve_build.py --projec
 Inside Resolve, the snippet sets ARGS and __file__ and execs this file; `result` = what happened (counts, failures).
 
 Modes (one per MCP call; each stays well under 60 s for a 20-min cut):
-  import          every source's program file + angle files (+ audio_files) into <root_bin>/Rushes/<source id>
-  multicam        one multicam clip per source with angles (program = angle 1, synced on audio); clips renamed
-                  "1 <id> program", "2 <id> <angle>" ... because Resolve orders angles by clip NAME
+  import          every source's program file + angle files (+ audio_files) into 02 Footage/<shoot>/<source id>
+                  (audio files in its sub-bin Audio), keywords = the shoot + camera / audio track. Media already in
+                  the pool, wherever it is filed, is not imported twice.
+  multicam        one multicam clip per source with angles (program = angle 1, synced on audio) in
+                  02 Footage/<shoot>/Multicam. Resolve orders angles by clip NAME: the clips carry "1 <id> program",
+                  "2 <id> <angle>" ... only while the multicam is made (it keeps those as angle names), then get their
+                  file names back; the camera stays in each clip's Angle metadata.
   build           timeline from the cut list. Rough list: V1 multicam (or program file), linked sound. Tight list
                   (has v_in_f): V1 picture and A1 sound appended apart (J-cuts: sound before picture), sub-frame audio
                   edges + 1-frame "Cross Fade +3 dB" on in-the-voice cuts. Subtitles (the cut list's srt) first, then
@@ -21,12 +25,17 @@ Modes (one per MCP call; each stays well under 60 s for a 20-min cut):
   inspect         V1/A1 items of the named timeline vs this cut list's plan: same = no hand edits, safe to rebuild
   read_cuts       the named timeline's A1 items as they are now -> Cut list on source frames (ARGS out = path):
                   captions, graphics and formats follow the edit the human approved, never the planned cut list
-Never deletes: a timeline with the same name -> error, unless ARGS["replace"] = True (inspect it first). Current
-timeline and page are restored after a build.
+Where things go and what they are called: resolve_bins.py (layout) and references/resolve.md § Organization. The
+build lands in 01 Timelines/WIP/Latest under the video's plain name (ARGS name, default the cut list's "timeline"),
+its SRT in 03 Assets/Subtitles/<name>. A timeline with that name already there -> error, unless ARGS["replace"] = True
+(inspect it first): the existing one is then filed in 01 Timelines/WIP/Archive as "<name> vNN YYYY-MM-DD <state>"
+(nothing is deleted, hand edits stay in that copy) and the new build takes the plain name. ARGS["replace"] = "delete"
+deletes it instead. Current timeline, page and media-pool folder are restored after every mode.
 
-ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name, default the cut list's), replace,
-out (read_cuts), camera_tracks (build).
-edit.json "resolve": {"root_bin": "Shoot 2026-03-02"} = top media-pool folder (default "Edit"). Review colours:
+ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name), replace, state (keyword and archive
+label of this build, default "tight" for a tight cut list, else "rough"), out (read_cuts), camera_tracks (build).
+edit.json "resolve": {"shoot": "2026-03-02 Studio"} = this shoot's folder under 02 Footage, named
+"<YYYY-MM-DD> <place or subject>" (the older key "root_bin" still reads as the shoot name). Review colours:
 Fuchsia phrase trim on a soft dip · Sand timed filler on a soft dip · Sky filler cut inside the voice (listen first)
 · Pink phrase trim (check meaning) · Mint timed filler · Cyan breath glued to a word · Lavender J-cut.
 Verified API behaviour this relies on (Resolve Studio 21.2): engine.md § Resolve.
@@ -163,6 +172,19 @@ def summary(pl, marks=None):
 # ---------------------------------------------------------------- Resolve side
 
 def run_in_resolve(resolve, project, args):
+    mp = project.GetMediaPool()
+    folder0 = mp.GetCurrentFolder()  # imports and new bins change the current folder: the human gets theirs back
+    try:
+        return _run(resolve, project, args)
+    finally:
+        if folder0:
+            mp.SetCurrentFolder(folder0)
+
+
+def _run(resolve, project, args):
+    import importlib
+    import resolve_bins as B
+    importlib.reload(B)  # Resolve's interpreter keeps modules between calls
     P = E.Project(args["project"])
     rcfg = P.cfg.get("resolve") or {}
     mp = project.GetMediaPool()
@@ -187,37 +209,41 @@ def run_in_resolve(resolve, project, args):
     def key(p):
         return os.path.normcase(os.path.normpath(p))
 
-    top = sub(root, rcfg.get("root_bin", "Edit"))
+    # layout: resolve_bins.py. Footage of this shoot under 02 Footage/<shoot>; the whole pool is searched for media
+    # already imported, so a project filed under an older layout keeps working and nothing comes in twice.
+    shoot = B.clean(rcfg.get("shoot") or rcfg.get("root_bin") or "Shoot")
+    shoot_path = B.FOOTAGE + "/" + shoot
     mode = args.get("mode", "build")
 
     def timelines():
         return [project.GetTimelineByIndex(i) for i in range(1, project.GetTimelineCount() + 1)]
 
     if mode == "import":
-        have = index(top, {})
-        rushes = sub(top, "Rushes")
+        have = index(root, {})
         for sid in P.sources:
             files = [P.file(sid)] + [a["file"] for a in P.angles(sid).values()]
             files = list(dict.fromkeys(f for f in files if f))
-            b = sub(rushes, sid)
             new = [f for f in files if key(f) not in have]
-            if new:
-                mp.SetCurrentFolder(b)
-                for g in mp.ImportMedia(new) or []:
-                    have[key(g.GetClipProperty("File Path"))] = g
             wavs = [P.p(w) for w in P.src(sid).get("audio_files") or []]
             neww = [w for w in wavs if key(w) not in have]
+            if new or neww:  # no empty bins for sources that are in the pool already
+                b = sub(B.path_bin(mp, shoot_path), B.clean(sid))
+            if new:
+                mp.SetCurrentFolder(b)
+                for g in mp.ImportMedia(new) or []:  # clip name = file name: never renamed for good
+                    have[key(g.GetClipProperty("File Path"))] = g
+                    B.tag(g, shoot, "camera")
             if neww:
                 mp.SetCurrentFolder(sub(b, "Audio"))
                 for g in mp.ImportMedia(neww) or []:
                     have[key(g.GetClipProperty("File Path"))] = g
+                    B.tag(g, shoot, "audio track")
             missing = [f for f in files + wavs if key(f) not in have]
             report[sid] = {"files": len(files) + len(wavs), "new": len(new) + len(neww), "missing": missing}
         return report
 
-    idx = index(top, {})
-    mcbin = sub(top, "Multicam")
-    mcs = {c.GetClipProperty("Clip Name"): c for c in mcbin.GetClipList() or []}
+    idx = index(root, {})
+    mcs = {c.GetName(): c for c, _f, _p in B.walk(root) if c.GetClipProperty("Type") == "Multicam"}
 
     if mode == "multicam":
         for sid in P.sources:
@@ -227,24 +253,18 @@ def run_in_resolve(resolve, project, args):
                 continue
             if name not in mcs:
                 order = [("program", P.file(sid))] + [(n, a["file"]) for n, a in P.angles(sid).items() if a["file"] != P.file(sid)]
-                items = []
-                for k, (n, f) in enumerate(order, 1):
-                    it = idx.get(key(f))
-                    if it is None:
-                        report[sid] = {"error": "not imported (run mode import)", "file": f}
-                        break
-                    it.SetClipProperty("Clip Name", f"{k} {sid} {n}")  # angle order = clip name sort
-                    items.append(it)
-                else:
-                    mp.SetCurrentFolder(mcbin)
-                    got = mp.CreateMulticamClip(items, {"name": name, "angleSyncMode": resolve.MULTICAM_ANGLE_SYNC_AUDIO,
-                                                        "angleNameMode": resolve.MULTICAM_ANGLE_NAME_CLIP,
-                                                        "useFullClipExtents": True, "createBinForSourceClips": False,
-                                                        "frameRate": float(P.cfg.get("fps", 23.976))}) or []
-                    if got:
-                        mcs[name] = got[0]
-                if sid in report:
+                gone = next((f for _n, f in order if idx.get(key(f)) is None), None)
+                if gone:
+                    report[sid] = {"error": "not imported (run mode import)", "file": gone}
                     continue
+                # angle order = clip name sort: temporary "N <id> <angle>" names, file names back right after
+                got, bad = B.multicam(resolve, project, [(n, idx[key(f)]) for n, f in order], name, shoot_path,
+                                      float(P.cfg.get("fps", 23.976)), label=sid)
+                if got:
+                    mcs[name] = got
+                    B.tag(got, shoot, "multicam")
+                if bad:
+                    report.setdefault("names_not_restored", []).extend(bad)
             mc = mcs.get(name)
             lens = {}
             for n, f in [("program", P.file(sid))] + [(n, a["file"]) for n, a in P.angles(sid).items()]:
@@ -346,20 +366,26 @@ def run_in_resolve(resolve, project, args):
         return {"error": "media not in the media pool (run modes import / multicam)", "missing": missing}
     old = [t for t in timelines() if t and t.GetName() == name]
     if old and not args.get("replace"):
-        return {"error": f"timeline {name!r} exists", "hint": "pass ARGS name = a new version, or replace = True after "
-                "mode inspect shows no hand edits"}
+        return {"error": f"timeline {name!r} exists", "hint": "replace = True files it in 01 Timelines/WIP/Archive as "
+                "'<name> vNN <date> <state>' and builds the new one under the plain name (run mode inspect first: hand "
+                "edits stay in the archived one); replace = 'delete' deletes it"}
     prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()
     prev_name = prev_tl.GetName() if prev_tl is not None else None
-    if old:
+    archived = None
+    if old and args.get("replace") == "delete":
         mp.DeleteTimelines(old)
-    tlbin = sub(top, "Timelines")
-    subsbin = sub(tlbin, "Subtitles")
+    elif old:
+        archived = B.archive(resolve, project, name)
+        if "error" in archived:
+            return {"error": "the existing timeline could not be archived, nothing built", "archive": archived}
+    state = args.get("state") or ("tight" if pl["tight"] else "rough")
+    tlbin = B.path_bin(mp, B.LATEST)
     srt = None
     if pl["srt"] and os.path.isfile(pl["srt"]):
         ex = idx.get(key(pl["srt"]))
         if ex is not None:  # drop and re-import: the SRT may have changed on disk (timelines keep their subtitle items)
             mp.DeleteClips([ex])
-        mp.SetCurrentFolder(subsbin)
+        mp.SetCurrentFolder(B.path_bin(mp, B.ASSETS + "/Subtitles/" + B.clean(name)))
         got = mp.ImportMedia([pl["srt"]]) or []
         srt = got[0] if got else None
     mp.SetCurrentFolder(tlbin)
@@ -441,7 +467,12 @@ def run_in_resolve(resolve, project, args):
             angles = {"ok": False, "error": f"{type(e).__name__}: {e}"}
     v1 = tl.GetItemListInTrack("video", 1) or []
     a1 = tl.GetItemListInTrack("audio", 1) or []
-    report = {"timeline": name, "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
+    item = tl.GetMediaPoolItem()  # the angle switch re-imports the timeline: file and tag the one that stands now
+    filed = B.move(resolve, project, [item], B.LATEST) if item else {"error": "timeline has no media pool item"}
+    if item:
+        B.tag(item, name, "timeline", "latest", state, drop=B.PLACE_WORDS + B.STATES)
+    report = {"timeline": name, "bin": B.LATEST, "filed": filed, "archived": archived, "state": state,
+              "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
               "V2": len(tl.GetItemListInTrack("video", 2) or []) if tl.GetTrackCount("video") >= 2 else 0,
               "V3": len(tl.GetItemListInTrack("video", 3) or []) if tl.GetTrackCount("video") >= 3 else 0,
               "angles": angles,
@@ -467,7 +498,10 @@ def _cli():
     ap.add_argument("--name", help="timeline name (default: the cut list's)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan: items per track, markers, joins")
     ap.add_argument("--snippet", action="store_true", help="print the run_script_unsafe code for this call")
-    ap.add_argument("--replace", action="store_true", help="snippet: replace a same-name timeline (inspect first)")
+    ap.add_argument("--replace", action="store_true",
+                    help="snippet, build: a same-name timeline is filed in 01 Timelines/WIP/Archive under a versioned "
+                         "name, the new build takes the plain name (inspect first)")
+    ap.add_argument("--state", help="snippet, build: keyword and archive label of this build (default rough / tight)")
     ap.add_argument("--json", help="dry run: write the full plan here")
     ap.add_argument("--out", help="snippet, read_cuts: where Resolve writes the read-back Cut list")
     ap.add_argument("--camera-tracks", action="store_true",
@@ -475,7 +509,7 @@ def _cli():
     a = ap.parse_args()
     if a.snippet:
         args = {"mode": a.mode, "project": str(Path(a.project).resolve()), "cuts": str(Path(a.cuts).resolve()) if a.cuts else None,
-                "name": a.name, "replace": a.replace, "out": str(Path(a.out).resolve()) if a.out else None,
+                "name": a.name, "replace": a.replace, "state": a.state, "out": str(Path(a.out).resolve()) if a.out else None,
                 "camera_tracks": a.camera_tracks}
         me = str(Path(__file__).resolve())
         print(f"g = dict(globals()); g['ARGS'] = {json.dumps(args, ensure_ascii=False)}; g['__file__'] = {me!r}\n"

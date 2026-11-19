@@ -50,7 +50,7 @@ checks/joins.json, checks/master.json                                     join_c
   "keyterms": ["Product name", "brand.com"],
   "overrides": "overrides.json",
   "style": "style.json",
-  "resolve": {"root_bin": "Shoot 2026-03-02"},
+  "resolve": {"shoot": "2026-03-02 Studio"},
   "sources": {
     "A": {
       "file": "$MEDIA/shoot/take1/Program.mp4",
@@ -92,7 +92,7 @@ checks/joins.json, checks/master.json                                     join_c
 ## rough.json (anchors)
 
 ```json
-{"timeline": "Studio tour — rough v1",
+{"timeline": "Studio tour",
  "segments": [["A", [27.2, "faire une vidéo de quinze minutes"], [74, "pas avoir etc"], {"face": true, "why": "hook"}],
               ["A", [77, "Donc essentiellement quand tu arrives"], [360, "on va se le dire"]],
               ["B", [57.5, "Ça me prenait trois heures"], [78.3, "j'arrive et j'enregistre"], {"alt": "short hook"}]],
@@ -159,7 +159,8 @@ A 21-min French studio walkthrough (3 sources, 20 rough segments): rough 20.81 m
 Rules for every Resolve call and the log of what failed (imports, appends, subtitles, markers, renders, frames, Fusion, hangs): `/videos:resolve` and [resolve](resolve.md). Below: how this engine uses Resolve.
 
 - `run_script_unsafe` with `timeout` 60, one mode per call. Keep logic in a file and `exec` it (`resolve_build.py --snippet` prints the call). A timed-out call keeps running inside Resolve: read the result back before rerunning a mode.
-- Multicam: angle order = clip NAME sort (list order ignored), so clips are renamed `1 <id> program`, `2 <id> <angle>`. With full extents the multicam starts at the earliest angle: program frame 0 sits at −min(0, min(round(offset × fps))).
+- Bins and names: one layout for every project ([resolve](resolve.md) § Organization, code in `scripts/resolve_bins.py`). Footage in `02 Footage/<resolve.shoot>/<source id>`, the build in `01 Timelines/WIP/Latest` under the video's plain name, its SRT in `03 Assets/Subtitles/<name>`; `replace` files the old timeline in `01 Timelines/WIP/Archive` as `<name> vNN YYYY-MM-DD <state>`. Media already in the pool is found wherever it is filed (the whole pool is indexed by file path).
+- Multicam: angle order = clip NAME sort (list order ignored), so the clips carry `1 <id> program`, `2 <id> <angle>` while the multicam is created and get their file names back right after (the multicam keeps those angle names; the camera stays in each clip's `Angle` metadata). With full extents the multicam starts at the earliest angle: program frame 0 sits at −min(0, min(round(offset × fps))).
 - Camera changes = the multicam clip's ACTIVE ANGLE on V1, never another camera's clip on a track above (an editor switches angles on the multicam; flat clips on V2 / V3 break that workflow). No API call sets the active angle (`PerformMulticamSmartSwitch` lets Resolve pick, ~77 s per 40 s of timeline) → `scripts/resolve_multicam_angles.py` does it through a `.drt` round trip: `Timeline.Export(path, resolve.EXPORT_DRT, resolve.EXPORT_NONE)` = zip of XML; a V1 multicam item's `<FieldsBlob>` (hex: u32 2, u32 length, 0x80 raw / 0x81 zstd, protobuf-like payload) holds `"Camera N"`; rewrite N, `MediaPool.ImportTimelineFromFile(path)` (named after the FILE, lands in the current bin, links the existing media, becomes current; ImportOptions ignored for .drt). Round trip checked equal: items, sub-frame audio edges, transitions, subtitles, markers, track names. Angle N = the Nth video track of the multicam's own sequence (`<MediaRef>` → `<Sm2MpMulticamClip>` → `<Sm2Sequence>`). `GetName()` of a multicam item = `<multicam> - <angle clip name>` = readback. `build` places face / camera pieces on V2 / V3, then `switch_angles(from_tracks=True, inplace=True)` turns them into V1 angle switches; `sync_frames` compares each old clip's frame with the angle's (0, or ±1 where Resolve's audio sync rounded an angle offset differently). zstd: stdlib on Python ≥ 3.14; older → `zstandard` installed in the Python that runs Resolve's scripts. Missing, or any other failure in the switch → the build still finishes, clips stay on V2 / V3, `angles.ok` false and `angles.error` says why (fix, or build with `--camera-tracks`).
 - Switching angles on any timeline (a human's edit, an older project): from `run_script_unsafe`, `sys.path.insert(0, "<plugin>/scripts"); import resolve_multicam_angles as A; importlib.reload(A); A.switch_angles(resolve, project, "<timeline>", switches=[("01:00:12:00", "01:00:18:00", "Left")], from_tracks=False, out_name=None, inplace=False, dry=False)`. Works on a duplicate, cuts V1 where needed (re-append the same source frames), keeps the original until every check passed, refuses a camera the multicam lacks. V1 clips with linked audio or a transform are not cut (reported). A 17-min timeline with 324 V1 clips and 71 camera clips converts in ~6 s.
 - Sub-frame audio needs the user preference "Align audio edits to frame boundaries" OFF; then `SetLeftOffset/SetRightOffset(x, True, False)` take fractional frames. A 1-frame audio transition lands at [join − 1, join], so both edges of an in-the-voice cut sit half a frame past the splice.

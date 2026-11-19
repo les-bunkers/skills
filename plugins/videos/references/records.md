@@ -34,7 +34,7 @@ talent: Host name
 style: docs/edit_style.md     # taste files the stages read, space-separated paths
 code: footage/2026-03-02/rough-cut
 media: /mnt/media/acme/videos/launch-03-studio-tour
-resolve: Acme project / Studio tour — tight v1
+resolve: Acme project / Studio tour       # project / working timeline (the video's plain name, in 01 Timelines/WIP/Latest)
 brief: done 2026-03-02        # one key per stage: status word + date or note
 generate: …  ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  master: …  formats: …  clips: …  qc: …  publish: …
 next: editor reviews the tighten markers (pink first)
@@ -47,7 +47,7 @@ Status = the first word of a stage value:
 |---|---|
 | `todo` | not started |
 | `doing` | an agent is on it (say what is running) |
-| `review` | waiting on a human; the rest says what to look at (`review editor: timeline v2, pink markers`) |
+| `review` | waiting on a human; the rest says what to look at (`review editor: timeline Studio tour, pink markers`) |
 | `done` | finished, with the date |
 | `skip` | does not apply to this kind or this video |
 | `blocked` | the rest says why |

@@ -6,7 +6,7 @@
 get padded, land on frames -> a Cut list (*.cuts.json) + retimed captions (SRT) + every seam printed for reading.
 
 in:  --project edit.json, --spec rough.json:
-       {"timeline": "Studio tour — rough v1",
+       {"timeline": "Studio tour",
         "segments": [["A", [27.2, "faire une vidéo de quinze minutes"], [74, "pas avoir etc"], {"face": true}],
                      ["B", [57.5, "Ça me prenait trois heures"], [78.3, "j'arrive et j'enregistre"], {"alt": "short hook"}]],
         "markers": [["A", 27.2, "faire une vidéo", "Green", "Hook", "short candidate"]],

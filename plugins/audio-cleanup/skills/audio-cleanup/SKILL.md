@@ -95,7 +95,7 @@ accept a model license on their behalf.
    exec(open(r"${CLAUDE_PLUGIN_ROOT}/scripts/resolve_cleanup.py", encoding="utf-8").read())
    ```
    Adds stereo tracks "RE-USE" and "MASTER −14 LUFS" (+ "RE-USE — <speaker>" with SPLIT_TRACKS) mirroring the
-   plan's TRACK items; media in bin "Audio cleanup — <job folder name>". The report must show
+   plan's TRACK items; media in bin `03 Assets/Voice/<video>` with the keywords <video> and `voice` (<video> = the timeline's name without a version suffix; another name: `VOICE_BIN = "<video>"`). The report must show
    `position_mismatches` 0 and `max_source_time_error_s` 0.0 for every track (mixdown route: 1 mismatch is expected,
    the one long item against the multicam pieces; check that item spans 0..N frames instead). `ENABLE="none"` (default) leaves
    every existing toggle alone and adds the new tracks disabled, so toggle-based render checks by others keep

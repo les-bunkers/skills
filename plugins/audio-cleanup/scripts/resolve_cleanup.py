@@ -9,6 +9,7 @@ long timelines). Stdlib only. Set globals, then exec this file:
     ENABLE = "none"                 # place: "none" = existing toggles untouched, new tracks off (default);
                                     #   "master" = master on, every other audio track off
     SPLIT_TRACKS = False            # place: also add one RE-USE track per speaker for split sources
+    VOICE_BIN = None                # place: the video's name, when it differs from the timeline's (see below)
     exec(open(r"<plugin>/scripts/resolve_cleanup.py", encoding="utf-8").read())
 
 plan  -> <JOB>/plan.json: per timeline, every item of TRACK: source file, record position, source in/out (clip
@@ -16,13 +17,18 @@ plan  -> <JOB>/plan.json: per timeline, every item of TRACK: source file, record
          have no file path: listed under "skipped" (use a timeline built from the plain files, or decompose the
          multicam first). Re-planning a timeline replaces only that timeline in plan.json.
 place -> adds "RE-USE" and "MASTER −14 LUFS" (name from manifest.json) stereo audio tracks mirroring the TRACK
-         items of the plan, from the manifest's mov wrappers, media in bin "Audio cleanup — <job folder name>".
-         Idempotent: deletes earlier tracks with those names first. Restores the open timeline and page. Returns
-         per timeline position_mismatches (must be 0) and max_source_time_error_s (must be 0.0).
+         items of the plan, from the manifest's mov wrappers. Media goes in the bin "03 Assets/Voice/<video>" with
+         the keywords <video> and "voice" (one layout for the whole project: the videos plugin's
+         references/resolve.md § Organization). <video> = the timeline's name without a version suffix
+         (" v02 2026-03-04 rough"), or VOICE_BIN; a wrapper already in the pool, wherever it is filed, is reused.
+         Idempotent: deletes earlier tracks with those names first. Restores the open timeline, page and
+         media-pool folder. Returns per timeline position_mismatches (must be 0) and max_source_time_error_s
+         (must be 0.0).
 """
 import datetime
 import json
 import os
+import re
 
 ACTION = globals().get("ACTION", "plan")
 JOB = globals()["JOB"]
@@ -30,6 +36,9 @@ TIMELINES = globals().get("TIMELINES")
 TRACK = int(globals().get("TRACK", 1))
 ENABLE = globals().get("ENABLE", "none")
 SPLIT_TRACKS = bool(globals().get("SPLIT_TRACKS", False))
+VOICE_BIN = globals().get("VOICE_BIN")
+VOICE_ROOT = "03 Assets/Voice"
+VERSIONED = re.compile(r"^(.+) v\d{2,3} \d{4}-\d{2}-\d{2}(?: .+)?$")  # "<video> vNN YYYY-MM-DD <state>"
 RE_NAME, SPK_PREFIX = "RE-USE", "RE-USE — "
 EXACT = {23.976: 24000 / 1001, 29.97: 30000 / 1001, 47.952: 48000 / 1001, 59.94: 60000 / 1001, 119.88: 120000 / 1001}
 
@@ -99,6 +108,21 @@ def sub(mp, parent, name):
     return mp.AddSubFolder(parent, name)
 
 
+def video_of(timeline_name):
+    m = VERSIONED.match(timeline_name)
+    return re.sub(r"\s*[\\/:]+\s*", " - ", m.group(1) if m else timeline_name).strip()  # no "/" in a bin name
+
+
+def pool_files(folder, acc):
+    for c in folder.GetClipList() or []:
+        p = c.GetClipProperty("File Path")
+        if p:
+            acc[os.path.normcase(p)] = c
+    for s in folder.GetSubFolderList() or []:
+        pool_files(s, acc)
+    return acc
+
+
 def ours(n, master_name):
     return n in (RE_NAME, master_name) or n.startswith(SPK_PREFIX) or (n.startswith("MASTER ") and n.endswith(" LUFS"))
 
@@ -115,14 +139,21 @@ def place():
     prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()  # noqa: F821
     resolve.OpenPage("edit")  # noqa: F821  (Deliver page swallows track toggles)
     mp = project.GetMediaPool()  # noqa: F821
-    folder = sub(mp, mp.GetRootFolder(), "Audio cleanup — " + os.path.basename(JOB.rstrip("\\/")))
-    have = {os.path.normcase(c.GetClipProperty("File Path")): c for c in (folder.GetClipList() or [])}
+    prev_folder = mp.GetCurrentFolder()
+    have = pool_files(mp.GetRootFolder(), {})  # the whole pool: wrappers filed by an earlier run are reused
+    bins = {}
 
-    def media(path):
+    def media(path, video):
         k = os.path.normcase(path)
         if k not in have:
+            folder = mp.GetRootFolder()
+            for part in (VOICE_ROOT + "/" + video).split("/"):
+                folder = sub(mp, folder, part)
             mp.SetCurrentFolder(folder)
             have[k] = (mp.ImportMedia([path]) or [None])[0]  # plain path strings: the dict form imports nothing
+            if have[k]:
+                have[k].SetMetadata("Keywords", f"{video}, voice")  # one comma-separated string
+                bins[video] = bins.get(video, 0) + 1
         return have[k]
 
     report = {}
@@ -150,7 +181,8 @@ def place():
                         else outs.get("speakers", {}).get(kind.split(":", 1)[1])) if outs else None
                 if not path:
                     continue
-                clips.append({"mediaPoolItem": media(path["resolve_media"]), "startFrame": x["src_in_f"],
+                clips.append({"mediaPoolItem": media(path["resolve_media"], VOICE_BIN or video_of(t["name"])),
+                              "startFrame": x["src_in_f"],
                               "endFrame": x["src_out_f"], "recordFrame": st + x["rec_f"], "trackIndex": idx,
                               "mediaType": 2})
             if clips:
@@ -181,6 +213,9 @@ def place():
         project.SetCurrentTimeline(prev_tl)  # noqa: F821
     if prev_page:
         resolve.OpenPage(prev_page)  # noqa: F821
+    if prev_folder:
+        mp.SetCurrentFolder(prev_folder)
+    report["imported"] = {VOICE_ROOT + "/" + v: n for v, n in bins.items()}
     report["restored"] = {"timeline": prev_tl.GetName() if prev_tl else None, "page": prev_page}
     return report
 

@@ -10,7 +10,7 @@ ARGS: {"timelines": [names] | "prefix": "...", "target_dir": "...", "audio_track
        "suffix": "-master", "start": true}
 result: jobs queued (format, size, fps, codecs per job), started or not. Poll GetRenderJobStatus = Complete before
 reading a file (ffprobe sees a duration while Resolve still writes). Then finals_check.py on every file.
-usage: python render_finals.py --timeline "Studio tour — tight" --target-dir <masters dir> [--audio-track MASTER] --snippet
+usage: python render_finals.py --timeline "Studio tour" --target-dir <masters dir> [--audio-track MASTER] --snippet
 """
 import json
 import re

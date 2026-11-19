@@ -40,7 +40,7 @@ Next to the renders, `layers.json`: one entry per layer, `{"id", "file", "record
 
 ## Place in Resolve (scripting API, `run_script_unsafe`)
 
-1. Bin: `mp = project.GetMediaPool()`; reuse or `mp.AddSubFolder(root, "<layers bin>")`, `mp.SetCurrentFolder(bin)`, `mp.ImportMedia([path, ...])` (plain strings). Check each clip's `GetClipProperty("Frames")` against the placement list.
+1. Bin: `mp = project.GetMediaPool()`; `bin = B.path_bin(mp, "03 Assets/Videos/<Video>/<set>")` (`scripts/resolve_bins.py`; layout: [resolve](resolve.md) § Organization), `mp.SetCurrentFolder(bin)`, `mp.ImportMedia([path, ...])` (plain strings), `B.tag(clip, "<Video>", "graphic")` on each, then put the current folder back. Check each clip's `GetClipProperty("Frames")` against the placement list.
 2. Timeline: `AppendToTimeline` writes only to the CURRENT timeline. If the human is working in another timeline, ask before switching; switch back to their timeline when done.
 3. Track: `tl.AddTrack("video")`, `tl.SetTrackName("video", vt, "<layers track name>")`; on reruns find the track by name. V1, A1 and every other track stay untouched.
 4. Place: `mp.AppendToTimeline([{"mediaPoolItem": clip, "startFrame": 0, "endFrame": n, "trackIndex": vt, "recordFrame": tl.GetStartFrame() + f0, "mediaType": 1}])`. `endFrame` is exclusive (n = clip frames); `mediaType` 1 = picture only, so no empty audio items land on the audio tracks. Skip a layer whose record frame is already occupied on that track (reruns stay idempotent).

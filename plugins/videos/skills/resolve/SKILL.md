@@ -1,6 +1,6 @@
 ---
 name: resolve
-description: Drive DaVinci Resolve Studio from an agent through Blackmagic's DaVinci Resolve MCP — the rules every call follows (timeouts that don't stop scripts, sandbox vs unsafe, one Resolve shared with the human and other sessions, save and restore state, check every return value) and the log of what failed before (imports, appends, subtitles, markers, multicam angles, audio edits, renders, frame grabs, LUTs, Fusion, restarts, hangs). Use before any Resolve MCP call (run_script, run_script_unsafe, get_image, get_thumbnails, describe_grade), when a Resolve script silently does nothing, returns False/None/[] or times out, when Resolve hangs, won't launch or the MCP says it is not running, or when running /videos:resolve.
+description: Drive DaVinci Resolve Studio from an agent through Blackmagic's DaVinci Resolve MCP — the rules every call follows (timeouts that don't stop scripts, sandbox vs unsafe, one Resolve shared with the human and other sessions, save and restore state, check every return value) and the log of what failed before (imports, moves that copy, appends, subtitles, markers, multicam angles, audio edits, renders, frame grabs, LUTs, Fusion, restarts, hangs), plus the one media-pool layout every project follows: which bin a timeline, a camera file or an asset goes in, how timelines and versions are named, the snapshot made before a big edit, keywords and smart bins. Use before any Resolve MCP call (run_script, run_script_unsafe, get_image, get_thumbnails, describe_grade), when a Resolve script silently does nothing, returns False/None/[] or times out, when Resolve hangs, won't launch or the MCP says it is not running, when creating a bin, naming or versioning a timeline, filing or tagging clips or tidying a project's media pool, or when running /videos:resolve.
 ---
 
 The stages that touch Resolve (ingest, rough, tighten, audio, grade, master, formats) follow these rules. The full log of what works and what failed, by area: [resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md). Read the section for the area you are about to touch before writing the script.
@@ -47,10 +47,28 @@ One Resolve serves every agent session and the human: one project, current timel
 - One agent changes Resolve at a time; the others read. Frame renders too: three agents rendering frames at once wedged the renderer for half an hour.
 - Nothing changes while a render runs (imports return `[]`, markers return False).
 - Never `DeleteAllRenderJobs`; delete only your own job ids after `Complete`. After a render, `OpenPage("edit")`: on Deliver, track toggles return True and change nothing.
-- Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. Build new timelines beside old ones; delete or replace only what your own build made, after comparing it with the last build (hand edits → ask).
+- Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. A big change starts with a snapshot of the timeline into the archive (below); delete only your own tests, and replace a build only after comparing the timeline with the last cut list (hand edits → ask).
 - `DuplicateTimeline` and `ImportTimelineFromFile` make the new timeline current: restore the previous one.
 - Files on a timeline are held open: re-render to a new path, then `ReplaceClip`.
 - See Resolve's state through the API, `get_image` / `get_thumbnails`, or a capture of the Resolve window alone; never a desktop screenshot.
+
+## Where things go, what they are called
+
+One layout in every project; full rules and who files what: the log's section Organization. The helper is `${CLAUDE_PLUGIN_ROOT}/scripts/resolve_bins.py` (`import resolve_bins as B` after `sys.path.insert`, then `importlib.reload(B)`).
+
+```
+01 Timelines/WIP/Latest     working timelines, plain name = the video: "Teleprompter demo"
+01 Timelines/WIP/Archive    earlier versions: "Teleprompter demo v02 2026-03-04 rough"
+01 Timelines/Final          approved cuts: "… v05 2026-03-09 approved"      01 Timelines/Scratch = tests
+02 Footage/<YYYY-MM-DD place or subject>/<take>/   camera and audio files as shot; <shoot>/Multicam
+03 Assets/Images · Videos/<Video> · Music · SFX · Voice/<Video> · Subtitles/<Video>
+```
+
+- Before a big edit (rebuild, restructure, a pass over the whole timeline): `result = B.snapshot(resolve, project, "<Video>", "<state>")`. A copy goes to the archive as `<Video> vNN YYYY-MM-DD <state>`; the working timeline keeps its plain name and its place. Never put a version, date or stage in a working timeline's name, never delete or edit an archived one.
+- Camera and audio clips keep their file name as clip name. The camera goes in the `Angle` metadata. Never rename a pool clip for good.
+- New bins come from `B.path_bin(mp, "03 Assets/Videos/<Video>")`, never at the pool root. Moves go through `B.move(resolve, project, items, path)`: a plain `MoveClips` can copy instead of moving while returning True.
+- Tag what you add: `B.tag(item, "<Video>", "<kind>")` (kinds in the log). Resolve shows one smart bin per keyword, so the video's name lists everything that belongs to it.
+- After a stage that added things: `result = B.audit(project)` → `ok` True.
 
 ## Verify
 
@@ -64,6 +82,8 @@ One Resolve serves every agent session and the human: one project, current timel
 |---|---|
 | `Script timed out` / a call runs for minutes | Running scripts |
 | Import returns `[]`, marker or toggle does nothing, wrong project or timeline | One Resolve, many callers; Media pool; Tracks |
+| A move doubled the clips or timelines, a bin exists twice, a rename returned False | Media pool |
+| Where does this go, what do I call it, how do I keep the old version | Organization |
 | Append places nothing, subtitles at the end, 1-frame-short items | Timelines; Subtitles |
 | Render without video, wrong size or bitrate, WAV comes out `.mov` | Rendering |
 | `Failed to render frame` | Frames and visual checks |
