@@ -171,6 +171,22 @@ def phrase_groups(words, min_s, max_chars, weak, pause=0.4):
                and len(" ".join(clean_caption(w["text"]) for w in [g[-1]] + n)) <= max_chars + 8):
             n.insert(0, g.pop())
     groups = [g for g in groups if g]
+    # a list of one-letter / number items stays on one caption: the comma break in group_words split
+    # « faire x, y, | z, c'est sûr » and left « z c'est sûr » on screen. Not when the next word closes the
+    # list itself (« 21, | 22, 23 ans. » keeps 22 with 23).
+    def short(w):
+        c = clean_caption(w["text"])
+        return len(c) == 1 or c.isdigit()
+
+    def item(w):
+        return w["text"].endswith(",") and short(w)
+    for i in range(1, len(groups)):
+        p, g = groups[i - 1], groups[i]
+        while (len(g) > 1 and p and item(p[-1]) and item(g[0]) and not short(g[1])
+               and g[0]["start"] - p[-1]["end"] < pause
+               and len(" ".join(clean_caption(w["text"]) for w in p + [g[0]])) <= max_chars + 8):
+            p.append(g.pop(0))
+    groups = [g for g in groups if g]
     # a lone word without punctuation joins the next group when the speaker pauses < 0.8 s (one-word flashes)
     out = []
     for g in groups:
