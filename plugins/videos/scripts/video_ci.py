@@ -26,7 +26,7 @@ Profiles (default auto: image -> generated, portrait or under 3 min -> short, el
   preview    review render (rough cut, timeline export): spec and loudness as warnings, pack secrets
 
 With --slug and --stage the reports land in the record: checks/ci/<stage>/<file>.json (+ frames) and the stage index
-checks/ci/<stage>.json. `videos.py set <slug> <stage> review|done` on master, formats, clips, generate, qc and publish
+checks/ci/<stage>.json. `videos.py set <slug> <stage> review|done` on master, formats, wide, clips, generate, qc and publish
 refuses unless every file in that index is unchanged since its CI run and none is red (override: --skip-ci "<why>").
 --forget removes a file from the index (a rejected take, a dropped format).
 
@@ -64,7 +64,7 @@ SCENE_THRESHOLD = 6.0   # scdet score (0-100) for a scene change; 6 found layout
 MAX_EVENTS = 60         # transitions sampled per file at most (strongest scene changes first; --events always kept)
 EVENT_OFFSETS = (0.1, 0.6)  # stills after each event: mid-transition (old and new text both on screen) and landed
 MERGE_S = 0.4           # events closer than this are one transition
-CI_STAGES = ("master", "formats", "clips", "generate", "qc", "publish")
+CI_STAGES = ("master", "formats", "wide", "clips", "generate", "qc", "publish")
 
 PROFILES = {
     # spec: codec/pix/audio requirements; level: "fail" blocks (red), "unsure" flags (amber), None skips the check

@@ -23,8 +23,8 @@ Exit 0 = green, 2 = amber, 1 = red, 3 = could not run. Reports: `<record>/checks
 
 ## The gate
 
-`videos.py set <slug> <stage> "review …" | "done …"` on `master`, `formats`, `clips`, `generate`, `qc` and `publish` reads the stage index and refuses unless:
-- the index has at least one file (`qc` and `publish` read the master, formats, clips and qc indexes together),
+`videos.py set <slug> <stage> "review …" | "done …"` on `master`, `formats`, `wide`, `clips`, `generate`, `qc` and `publish` reads the stage index and refuses unless:
+- the index has at least one file (`qc` and `publish` read the master, formats, wide, clips and qc indexes together),
 - every file still has the size and modification time it had when CI ran (a re-render after CI = stale = run CI again),
 - every input recorded with `--input` / `--manifest` is unchanged (a file: size + mtime; a folder: a fingerprint of every file's path, size and mtime): an edited spec, a new LUT, a re-cut master or a touched HyperFrames project makes the final stale even though the mp4 itself did not move,
 - no file is red.
@@ -61,9 +61,10 @@ Visual-tier cost: `short` ≈ 70 requests for a 48 s short, ~$0.008, 30 s; a 2-m
 
 | Stage | Files | Command |
 |---|---|---|
-| master | the rendered master | `video_ci.py <master> --slug <v> --stage master` (after `finals_check.py`) |
+| master | the rendered master (talking-head: the approved long 9x16) | `video_ci.py <master> --slug <v> --stage master` (after `finals_check.py`) |
+| wide | the 16x9 rendered from the approved 9x16 | `video_ci.py <16x9 master> --slug <v> --stage wide` (after `finals_check.py`) |
 | formats | every rendered format | `video_ci.py <finals> --slug <v> --stage formats --var hook=... --var cta=... --events <graphics spec> --input <spec> --input <project dir>` |
-| clips | every clip of the batch × the look shown | `video_ci.py <clips> --slug <batch> --stage clips --profile clip --var hook=...` (per clip hook: run per clip) |
+| clips | every short cut from the approved 9x16, or every clip of a batch × the look shown | `video_ci.py <clips> --slug <batch> --stage clips --profile clip --var hook=...` (per clip hook: run per clip) |
 | generate | every keyframe and take before a review page or a paid render | `video_ci.py <takes> --slug <v> --stage generate --profile generated` |
 | rough / tighten | a review render, when one is made | `video_ci.py <render> --profile preview` (no gate: the human reviews these in the NLE) |
 | qc | the finals of master / formats / clips | already in their indexes; `qc done` passes when they are fresh and none is red |

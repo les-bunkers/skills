@@ -27,7 +27,7 @@ Updates: `/plugin marketplace update les-bunkers`.
 
 | Plugin | Skills | What it does |
 |---|---|---|
-| `videos` | `/videos`, `/videos:new`, `:ingest`, `:transcribe`, `:rough`, `:tighten`, `:audio`, `:grade`, `:master`, `:formats`, `:clips`, `:qc`, `:publish`, `:resolve`, `:learn` | The pipeline. `/videos` shows a board of every video in progress; `/videos <name>` opens one and runs or proposes its next stage. Each stage has its own skill and writes its status back to the video's record. |
+| `videos` | `/videos`, `/videos:new`, `:ingest`, `:transcribe`, `:rough`, `:tighten`, `:audio`, `:grade`, `:formats`, `:master`, `:wide`, `:clips`, `:qc`, `:publish`, `:resolve`, `:learn` | The pipeline. `/videos` shows a board of every video in progress; `/videos <name>` opens one and runs or proposes its next stage. Each stage has its own skill and writes its status back to the video's record. |
 | `audio-cleanup` | `/audio-cleanup` | Speech cleanup for a DaVinci Resolve edit: plans from what the timeline actually plays, splits two speakers on one mic, enhances speech, masters to −14 LUFS, puts the new tracks back in Resolve and builds an A/B listening page. |
 | `vertical-clips` | `/vertical-clips` | A 9:16 clip factory for podcasts and long videos: sticky face crops, stacked two-person layout, caption text fixed against three transcripts, word-timed captions and hook rendered with HyperFrames, QC, a review page and export. |
 | `agent-ears` | `/agent-ears`, `/ears-bakeoff` | Lets an agent hear breaths and fillers (« euh », "um") so the tighten stage can cut them, and a blind labelling page plus scoring kit to test any detector against your own ears. |
@@ -37,10 +37,13 @@ Each plugin's `references/setup.md` lists what to install (ffmpeg, uv, Python en
 ## How a video moves
 
 ```
-/videos:new ──► ingest ──► transcribe ──► rough ──► tighten ──► audio ──► grade ──► master ──► formats ──► qc ──► publish
-                                                      ▲           ▲                              │
-                                                 agent-ears  audio-cleanup        clip batches: vertical-clips
+                                       the long 9:16 ("<Video> 9x16")                          made from the approved 9:16
+/videos:new ──► ingest ──► transcribe ──► rough ──► tighten ──► audio ──► grade ──► formats ──► master ──┬──► wide (16:9) ──┬──► qc ──► publish
+                                                      ▲           ▲                              approved └──► clips (shorts) ┘
+                                                 agent-ears  audio-cleanup                      podcast clip batches: vertical-clips
 ```
+
+A talking-head video is cut once, as the long vertical: rough, tighten, audio, grade and its graphics all land on one 9:16 timeline, and the human approves that whole cut at master. Then two stages run side by side from the approved cut: wide makes the 16:9 (same cut, sound and grade, framing and graphics redone for the wide frame) and clips makes the shorts (ranges of the approved vertical with their own hook). Timelines carry their format in their name (`Studio tour 9x16`, `Studio tour 16x9`, `Studio tour 9x16 S01 price`).
 
 Every video gets one record, `.agents/videos/<slug>/video.md`: one line per stage (`todo`, `doing`, `review`, `done`, `skip`, `blocked`), the decisions the human made, notes and a dated log. Stages that wait on a person stop at `review` and say what to look at. Finished files land in `artifacts/videos/<slug>/` with a `release.md` holding the caption, platforms, post date, loudness and QC result. Heavy media stays on your media drive (`media_root`).
 
@@ -48,7 +51,7 @@ Put a `videos.json` at the root of your project (or of a folder holding several 
 
 Agents check renders with `scripts/decide.py`: yes/no, choice and score questions on stills, spans or audio of a video, answered with calibrated probabilities in about a second (Gemini Decisions API). After an edit it works like a unit test (hook present, no caption on a face, face inside the frame, grade applied, no password on screen); it also drops bad takes and blinking cover frames, and `calibrate` picks the wording and threshold of a new check on labelled examples. Details, measurements and limits: [decide](plugins/videos/references/decide.md).
 
-On top of it sits video CI (`scripts/video_ci.py`): every render an agent is about to show you or ship goes through a free local tier (codec, loudness, black, frozen and silent stretches) and the visual checks, and comes back green, amber (shown with the flagged frames) or red (fixed before you see it). It is mandatory: `videos.py` refuses to put master, formats, clips, qc or publish in `review` or `done` while a file's CI is missing, stale or red. Details: [ci](plugins/videos/references/ci.md). CI also looks right after every scene change and graphic entrance (text colliding or cut by the frame edge), checks overlay text at phone size, and refuses a final once a spec, project or LUT it was built from changed.
+On top of it sits video CI (`scripts/video_ci.py`): every render an agent is about to show you or ship goes through a free local tier (codec, loudness, black, frozen and silent stretches) and the visual checks, and comes back green, amber (shown with the flagged frames) or red (fixed before you see it). It is mandatory: `videos.py` refuses to put master, formats, wide, clips, qc or publish in `review` or `done` while a file's CI is missing, stale or red. Details: [ci](plugins/videos/references/ci.md). CI also looks right after every scene change and graphic entrance (text colliding or cut by the frame edge), checks overlay text at phone size, and refuses a final once a spec, project or LUT it was built from changed.
 
 Three more production tools: `claims_check.py` rejects on-screen prices, percentages, multipliers and superlatives nobody approved before a render starts ([claims](plugins/videos/references/claims.md)); `variants.py` renders 2–3 opening hooks or CTAs of an approved short for ad A/B tests without rebuilding it; `beats.py` maps a music bed (bpm, beats, downbeats, hits) and snaps graphic cues onto it for music-led pieces ([beats](plugins/videos/references/beats.md)).
 

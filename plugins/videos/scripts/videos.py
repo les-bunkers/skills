@@ -7,7 +7,7 @@
 One record per video: <project>/.agents/videos/<slug>/video.md (flat frontmatter, one key per stage, then
 ## Decisions / ## Notes / ## Log). Published files: <project>/artifacts/videos/<slug>/release.md + index.md.
 Spec: ${CLAUDE_PLUGIN_ROOT}/references/records.md
-Video CI gate: `set` to review/done on master, formats, clips, generate, qc or publish needs the files tested by
+Video CI gate: `set` to review/done on master, formats, wide, clips, generate, qc or publish needs the files tested by
 video_ci.py --slug --stage to be unchanged since, built from inputs unchanged since (video_ci.py --input/--manifest) and
 not red (references/ci.md); --skip-ci "<why>" passes it, logged.
 
@@ -40,9 +40,12 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-STAGES = ["brief", "generate", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "clips", "qc", "publish"]
+# talking-head = the long 9x16 first (rough .. formats on "<Video> 9x16", master = approved + rendered), then side by side:
+# wide = the 16x9 made from the approved 9x16, clips = shorts cut from it
+STAGES = ["brief", "generate", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "formats", "master", "wide", "clips", "qc", "publish"]
+PARALLEL = ("wide", "clips")
 KINDS = {
-    "talking-head": ["brief", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "master", "formats", "qc", "publish"],
+    "talking-head": ["brief", "ingest", "transcribe", "rough", "tighten", "audio", "grade", "formats", "master", "wide", "clips", "qc", "publish"],
     "clip-batch": ["brief", "transcribe", "rough", "audio", "grade", "clips", "qc", "publish"],
     "clip": ["brief", "transcribe", "rough", "audio", "grade", "formats", "qc", "publish"],
     "motion": ["brief", "audio", "formats", "qc", "publish"],
@@ -50,7 +53,7 @@ KINDS = {
 }
 HEAD = ["title", "slug", "workspace", "kind", "campaign", "content", "talent", "style", "code", "media", "resolve"]
 ABBR = {"brief": "brf", "generate": "gen", "ingest": "ing", "transcribe": "stt", "rough": "rgh", "tighten": "tgt", "audio": "aud", "grade": "grd",
-        "master": "mst", "formats": "fmt", "clips": "clp", "qc": "qc", "publish": "pub"}
+        "master": "mst", "formats": "fmt", "wide": "wid", "clips": "clp", "qc": "qc", "publish": "pub"}
 MARK = {"done": "✓", "skip": "·", "todo": "-", "doing": "▶", "review": "R", "blocked": "✕"}
 STATUS = ("todo", "doing", "review", "done", "skip", "blocked")
 TODAY = datetime.date.today().isoformat()
@@ -148,10 +151,21 @@ def word(v):
 
 
 def current(meta):
+    """The stage someone is on (doing / review / blocked) first, else the first one left to do."""
+    for s in STAGES:
+        if s in meta and word(meta[s]) in ("doing", "review", "blocked"):
+            return s
     for s in STAGES:
         if s in meta and word(meta[s]) not in ("done", "skip"):
             return s
     return "publish" if word(meta.get("publish")) == "done" else "-"
+
+
+def side_by_side(meta, st):
+    """Stages running beside `st`: wide (16x9) and clips (shorts) both start once the 9x16 is approved."""
+    if st not in PARALLEL:
+        return []
+    return [s for s in PARALLEL if s != st and s in meta and word(meta[s]) not in ("done", "skip")]
 
 
 def find(query):
@@ -208,8 +222,10 @@ def cmd_board(a):
     for vm, m, ws, _ in recs:
         st = current(m)
         stages = " ".join(f"{ABBR[s]}{MARK.get(word(m[s]), '?')}" for s in STAGES if s in m and word(m[s]) != "skip")
+        val = m.get(st, "") or "todo"
+        val += "".join(f" · {s}: {m.get(s) or 'todo'}" for s in side_by_side(m, st))
         rows.append((m.get("workspace", ws), m.get("campaign", ""), m.get("slug", vm.parent.name), m.get("kind", ""),
-                     st, m.get(st, ""), m.get("next", ""), stages))
+                     st, val, m.get("next", ""), stages))
     rows.sort(key=lambda r: (r[0], r[1], r[2]))
     last = None
     for ws, camp, slug, kind, st, val, nxt, stages in rows:
@@ -275,8 +291,8 @@ def cmd_new(a):
     print(f"created {rel(d / 'video.md')}" + (f"\nmedia: {meta['media']}" if "media" in meta else ""))
 
 
-CI_GATED = ("master", "formats", "clips", "generate", "qc", "publish")  # review/done here = a human sees or ships files
-CI_FINALS = ("master", "formats", "clips")  # what qc and publish answer for
+CI_GATED = ("master", "formats", "wide", "clips", "generate", "qc", "publish")  # review/done here = a human sees or ships files
+CI_FINALS = ("master", "formats", "wide", "clips")  # what qc and publish answer for
 
 
 FP_MAX_FILES = 5000  # folder fingerprints stop here (a HyperFrames project is a few hundred files)
@@ -329,7 +345,7 @@ def ci_gate(rec_dir, stage):
             entries += json.loads(p.read_text(encoding="utf-8")).get("files", [])
     if not entries:
         return False, (f"no CI report for {stage}: run video_ci.py <files> --slug <slug> --stage "
-                       f"{stage if stage not in ('qc', 'publish') else '<master|formats|clips>'} first")
+                       f"{stage if stage not in ('qc', 'publish') else '<master|formats|wide|clips>'} first")
     bad, count = [], {"green": 0, "amber": 0, "red": 0}
     for e in entries:
         p = Path(e["file"])

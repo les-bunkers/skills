@@ -31,9 +31,14 @@ its SRT in 03 Assets/Subtitles/<name>. A timeline with that name already there -
 (inspect it first): the existing one is then filed in 01 Timelines/WIP/Archive as "<name> vNN YYYY-MM-DD <state>"
 (nothing is deleted, hand edits stay in that copy) and the new build takes the plain name. ARGS["replace"] = "delete"
 deletes it instead. Current timeline, page and media-pool folder are restored after every mode.
+Formats: ARGS format = "9x16" (the long vertical every video is cut as first), "16x9" or "4x3" puts the format token in
+the name ("<name> 9x16"; a cut list read back from "<Video> 9x16" builds "<Video> 16x9" with format 16x9) and, when the
+project's own size makes another format, builds a timeline with its own settings (1080x1920 / 3840x2160 / 1440x1080,
+mismatched sources "scaleToCrop": filled and centre-cropped). The size is set and read back on a timeline made under a
+temporary name first: a size that does not take leaves the working timeline untouched. Result "format" = want / got.
 
-ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name), replace, state (keyword and archive
-label of this build, default "tight" for a tight cut list, else "rough"), out (read_cuts), camera_tracks (build).
+ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name), format, replace, state (keyword and
+archive label of this build, default "tight" for a tight cut list, else "rough"), out (read_cuts), camera_tracks (build).
 edit.json "resolve": {"shoot": "2026-03-02 Studio"} = this shoot's folder under 02 Footage, named
 "<YYYY-MM-DD> <place or subject>" (the older key "root_bin" still reads as the shoot name). Review colours:
 Fuchsia phrase trim on a soft dip · Sand timed filler on a soft dip · Sky filler cut inside the voice (listen first)
@@ -308,6 +313,9 @@ def _run(resolve, project, args):
 
     cut = E.read_json(args["cuts"])
     name = args.get("name") or cut.get("timeline") or Path(args["cuts"]).stem
+    fmt = args.get("format")
+    if fmt:
+        name = B.with_format(name, fmt)
     use_mc = lambda sid: bool(mc_name(P, sid)) and mc_name(P, sid) in mcs  # noqa: E731
     pl = plan(P, cut, use_mc)
 
@@ -371,15 +379,40 @@ def _run(resolve, project, args):
                 "edits stay in the archived one); replace = 'delete' deletes it"}
     prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()
     prev_name = prev_tl.GetName() if prev_tl is not None else None
+    tlbin = B.path_bin(mp, B.LATEST)
+    staged, custom = None, None
+    if fmt and B.fmt_of(project) != fmt:  # the project's size makes another format: this timeline gets its own
+        w, h = B.FORMATS[fmt]
+        tmp = name + " (building)"
+        left = [t for t in timelines() if t and t.GetName() == tmp]  # a failed earlier run of this script
+        if left:
+            mp.DeleteTimelines(left)
+        mp.SetCurrentFolder(tlbin)
+        staged = mp.CreateEmptyTimeline(tmp)
+        if not staged:
+            return {"error": f"CreateEmptyTimeline({tmp!r}) failed: nothing built, {name!r} untouched"}
+        custom = {k: bool(staged.SetSetting(k, v)) for k, v in (
+            ("useCustomSettings", "1"), ("timelineResolutionWidth", str(w)), ("timelineResolutionHeight", str(h)),
+            ("timelineInputResMismatchBehavior", "scaleToCrop"))}  # sources of another aspect fill the frame
+        custom["size"] = f"{staged.GetSetting('timelineResolutionWidth')}x{staged.GetSetting('timelineResolutionHeight')}"
+        custom["mismatch"] = staged.GetSetting("timelineInputResMismatchBehavior")
+        if B.fmt_of(staged) != fmt:
+            mp.DeleteTimelines([staged])
+            back = next((t for t in timelines() if t and prev_name and t.GetName() == prev_name), None)
+            if back is not None:
+                project.SetCurrentTimeline(back)
+            return {"error": f"the {fmt} size did not take on a new timeline: nothing built, {name!r} untouched",
+                    "settings": custom}
     archived = None
     if old and args.get("replace") == "delete":
         mp.DeleteTimelines(old)
     elif old:
         archived = B.archive(resolve, project, name)
         if "error" in archived:
+            if staged:
+                mp.DeleteTimelines([staged])
             return {"error": "the existing timeline could not be archived, nothing built", "archive": archived}
     state = args.get("state") or ("tight" if pl["tight"] else "rough")
-    tlbin = B.path_bin(mp, B.LATEST)
     srt = None
     if pl["srt"] and os.path.isfile(pl["srt"]):
         ex = idx.get(key(pl["srt"]))
@@ -389,7 +422,13 @@ def _run(resolve, project, args):
         got = mp.ImportMedia([pl["srt"]]) or []
         srt = got[0] if got else None
     mp.SetCurrentFolder(tlbin)
-    tl = mp.CreateEmptyTimeline(name)
+    if staged:
+        staged.SetName(name)
+        if staged.GetName() != name:
+            return {"error": f"built empty under {staged.GetName()!r}, rename to {name!r} failed", "archived": archived}
+        tl = staged
+    else:
+        tl = mp.CreateEmptyTimeline(name)
     project.SetCurrentTimeline(tl)
     st = tl.GetStartFrame()
     if srt:  # subtitles FIRST: an appended SRT ignores recordFrame and lands after the last clip
@@ -467,11 +506,22 @@ def _run(resolve, project, args):
             angles = {"ok": False, "error": f"{type(e).__name__}: {e}"}
     v1 = tl.GetItemListInTrack("video", 1) or []
     a1 = tl.GetItemListInTrack("audio", 1) or []
+    fmt_report = None
+    if fmt:  # the angle switch re-imports the timeline from a .drt: check its size survived
+        got = B.fmt_of(tl, project)
+        if got != fmt and custom:
+            w, h = B.FORMATS[fmt]
+            for k, v in (("useCustomSettings", "1"), ("timelineResolutionWidth", str(w)),
+                         ("timelineResolutionHeight", str(h)), ("timelineInputResMismatchBehavior", "scaleToCrop")):
+                tl.SetSetting(k, v)
+            got = B.fmt_of(tl, project)
+            custom["set_again_after_build"] = True
+        fmt_report = {"want": fmt, "got": got, "ok": got == fmt, "settings": custom}
     item = tl.GetMediaPoolItem()  # the angle switch re-imports the timeline: file and tag the one that stands now
     filed = B.move(resolve, project, [item], B.LATEST) if item else {"error": "timeline has no media pool item"}
     if item:
-        B.tag(item, name, "timeline", "latest", state, drop=B.PLACE_WORDS + B.STATES)
-    report = {"timeline": name, "bin": B.LATEST, "filed": filed, "archived": archived, "state": state,
+        B.tag(item, *B.timeline_words(name), "timeline", "latest", state, drop=B.PLACE_WORDS + B.STATES + B.FORMAT_WORDS)
+    report = {"timeline": name, "bin": B.LATEST, "filed": filed, "archived": archived, "state": state, "format": fmt_report,
               "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
               "V2": len(tl.GetItemListInTrack("video", 2) or []) if tl.GetTrackCount("video") >= 2 else 0,
               "V3": len(tl.GetItemListInTrack("video", 3) or []) if tl.GetTrackCount("video") >= 3 else 0,
@@ -496,6 +546,9 @@ def _cli():
     ap.add_argument("--cuts", help="cut list (needed for build / review_markers / inspect)")
     ap.add_argument("--mode", default="build", choices=["import", "multicam", "build", "review_markers", "inspect", "read_cuts"])
     ap.add_argument("--name", help="timeline name (default: the cut list's)")
+    ap.add_argument("--format", choices=["9x16", "16x9", "4x3"],
+                    help="timeline format: token in the name + own resolution when the project's makes another format "
+                         "(9x16 = the long vertical, cut first)")
     ap.add_argument("--dry-run", action="store_true", help="print the plan: items per track, markers, joins")
     ap.add_argument("--snippet", action="store_true", help="print the run_script_unsafe code for this call")
     ap.add_argument("--replace", action="store_true",
@@ -509,8 +562,8 @@ def _cli():
     a = ap.parse_args()
     if a.snippet:
         args = {"mode": a.mode, "project": str(Path(a.project).resolve()), "cuts": str(Path(a.cuts).resolve()) if a.cuts else None,
-                "name": a.name, "replace": a.replace, "state": a.state, "out": str(Path(a.out).resolve()) if a.out else None,
-                "camera_tracks": a.camera_tracks}
+                "name": a.name, "format": a.format, "replace": a.replace, "state": a.state,
+                "out": str(Path(a.out).resolve()) if a.out else None, "camera_tracks": a.camera_tracks}
         me = str(Path(__file__).resolve())
         print(f"g = dict(globals()); g['ARGS'] = {json.dumps(args, ensure_ascii=False)}; g['__file__'] = {me!r}\n"
               f"exec(open({me!r}, encoding='utf-8').read(), g); result = g['result']")
@@ -528,7 +581,11 @@ def _cli():
     pl = plan(P, cut, lambda sid: bool(mc_name(P, sid)))
     marks = review_plan(cut) if pl["tight"] else []
     name = a.name or cut.get("timeline")
-    print(f"timeline {name!r} (dry run, nothing sent to Resolve)")
+    if a.format:
+        import resolve_bins as B
+        name = B.with_format(name, a.format)
+    print(f"timeline {name!r}" + (f" ({a.format}: {'x'.join(map(str, B.FORMATS[a.format]))} unless the project is that "
+                                  f"format already)" if a.format else "") + " (dry run, nothing sent to Resolve)")
     print(json.dumps(summary(pl, marks), ensure_ascii=False))
     for lab, lst in (("V1 picture", pl["pic"] or pl["linked"]), ("A1 sound", pl["snd"]), ("V2 face", pl["face"]), ("V3 cameras", pl["cams"])):
         for x in lst[:3]:

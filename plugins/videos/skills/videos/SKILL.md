@@ -1,6 +1,6 @@
 ---
 name: videos
-description: Video production board and entry point for any project. With no argument it shows every video in progress (stage × status) and the next move for each; with a video name it opens that video's record, says where it stands and runs or proposes the next stage (/videos:new, ingest, transcribe, rough, tighten, audio, grade, master, formats, clips, qc, publish). Use when the user types /videos, names a video to continue, asks what video work is open or where a video stands, or makes any video request that doesn't name a stage.
+description: Video production board and entry point for any project. With no argument it shows every video in progress (stage × status) and the next move for each; with a video name it opens that video's record, says where it stands and runs or proposes the next stage (/videos:new, ingest, transcribe, rough, tighten, audio, grade, formats, master, wide, clips, qc, publish). Holds the order every talking-head video follows: the long 9:16 cut first and approved, then the 16:9 and the shorts made from it side by side. Use when the user types /videos, names a video to continue, asks what video work is open or where a video stands, or makes any video request that doesn't name a stage.
 argument-hint: "[video name or slug]"
 ---
 
@@ -10,9 +10,9 @@ argument-hint: "[video name or slug]"
 
 1. No argument → `videos.py board` (`--ws <W>` one workspace, `--wide` every stage column, `--all` include published). Show it, name the next move per active video, stop. "No video records" → offer `/videos:new`; `videos.py where` shows which folder was searched.
 2. A name → `videos.py show <query>` (exact slug, else fuzzy on slug and title; several hits → list them and ask). Read the record it prints: frontmatter = state, body = decisions, notes, log. Read the files listed in `style:` before any stage that cuts or styles.
-3. Pick the stage: the user's verb (« tighten X » → tighten), else the first stage whose status is not `done`/`skip`. Status `review …` = waiting on a human: show what to review (timeline, markers, page) and stop, unless the user is giving that review now → record it under `## Decisions`, then continue.
+3. Pick the stage: the user's verb (« tighten X » → tighten), else the stage someone is on (`doing` / `review` / `blocked`), else the first one left to do. Status `review …` = waiting on a human: show what to review (timeline, markers, page) and stop, unless the user is giving that review now → record it under `## Decisions`, then continue. Once master is `done`, wide and clips are both open: propose both (two agents can run them, one Resolve writer at a time).
 4. Load only that stage's skill (table) and the skills or docs it names; run it.
-5. After each stage: `videos.py set <slug> <stage> "<status> <date or what to look at>" --next "<next step>"` (master, formats, clips, generate, qc and publish need video CI first: next section). Doubts, skipped items and things to check go in `videos.py note <slug> "<text>"`. Never leave the record stale: the next session starts from it.
+5. After each stage: `videos.py set <slug> <stage> "<status> <date or what to look at>" --next "<next step>"` (master, formats, wide, clips, generate, qc and publish need video CI first: next section). Doubts, skipped items and things to check go in `videos.py note <slug> "<text>"`. Never leave the record stale: the next session starts from it.
 
 ## Stages
 
@@ -22,15 +22,27 @@ argument-hint: "[video name or slug]"
 | generate | your generation pipeline | AI video (kind `generative`): scenes → storyboard → references → voices → keyframes → animatic → shot clips; no skill in this plugin yet, paid models need a go-ahead |
 | ingest | `/videos:ingest` | probe sources, sync offsets, camera angles, NLE import, multicam |
 | transcribe | `/videos:transcribe` | word-level transcript with fillers kept, caption text |
-| rough | `/videos:rough` | text anchors → cut list → timeline + markers |
-| tighten | `/videos:tighten` | breaths, fillers, dead air, tight pauses, J-cuts, phrase trims, camera switches |
-| audio | `/videos:audio` | speech cleanup, speaker split, −14 LUFS master (→ `audio-cleanup` plugin) |
+| rough | `/videos:rough` | text anchors → cut list → the long `<Video> 9x16` timeline + markers |
+| tighten | `/videos:tighten` | breaths, fillers, dead air, tight pauses, J-cuts, phrase trims, camera switches, on the 9x16 |
+| audio | `/videos:audio` | speech cleanup, speaker split, −14 LUFS master (→ `audio-cleanup` plugin); one master serves every format |
 | grade | `/videos:grade` | one look per set, LUT export |
-| master | `/videos:master` | render from the NLE, read the cuts back, check the file |
-| formats | `/videos:formats` | graphics, captions, hook, end card as alpha layers in the NLE; 9:16 · 4:3 · 16:9 |
-| clips | `/videos:clips` | vertical clips cut from a long video or podcast (→ `vertical-clips` plugin) |
+| formats | `/videos:formats` | graphics, captions, hook, end card as alpha layers on the 9x16 (other kinds: their formats) |
+| master | `/videos:master` | the human approves the full 9x16: frozen in Final, rendered, cuts read back, file checked |
+| wide | `/videos:wide` | the 16:9 made from the approved 9x16: same cut, sound and grade, wide framing, 16:9 layers, render |
+| clips | `/videos:clips` | shorts cut from the approved 9x16 in the NLE; podcasts without a vertical edit → `vertical-clips` plugin |
 | qc | `/videos:qc` | one gate before anything ships |
 | publish | `/videos:publish` | finals into `artifacts/videos/<slug>/`, post text, covers, schedule |
+
+## Order: the long 9:16 first
+
+A talking-head video is cut once, as the long vertical, then turned into the other deliverables:
+
+1. ingest → transcribe → rough → tighten → audio → grade → formats, all on `<Video> 9x16` (1080×1920). Each stage keeps its own review gate.
+2. master: the human watches the whole 9x16 with its layers and approves it. It is frozen in `01 Timelines/Final` and rendered. Nothing after this point changes the approved cut.
+3. Then side by side, both made from the approved 9x16: wide builds `<Video> 16x9`, clips builds the shorts `<Video> 9x16 S01 <topic>` (ranges the human picks, Green markers from the rough as candidates). Each has its own review, render and video CI.
+4. qc, then publish: the long 9x16, the 16x9 and the shorts.
+
+A change the human asks for after step 2 is made on the 9x16 first (re-approved, re-rendered), then carried to the 16x9 and the shorts it touches. Kinds without a long edit (clip, motion, generative) keep their own formats stage. Timeline names: `/videos:resolve` § Where things go.
 
 Not stages: `/videos:resolve` = rules and failure log for driving DaVinci Resolve through its MCP, used by every stage that touches Resolve; `/videos:learn` = folds past mistakes (record lessons + past agent sessions) back into the skills or the project's notes.
 
@@ -43,7 +55,7 @@ Nothing reaches a human's eyes or a platform before video CI: before a review pa
 - RED: do not show it. Fix the cause, re-render, re-run. Can't fix → tell the human what failed, with the frames, and set the stage `blocked <what>`.
 - AMBER: show it with the flagged frames (`checks/ci/<stage>/<file>_frames/`) and one line per flag. Never call an amber file clean.
 - GREEN: show it. CI covers the mechanical and visual defects; taste, claims and pacing stay with the human.
-- `videos.py set` refuses `review` / `done` on master, formats, clips, generate, qc and publish unless the stage's CI index is fresh (files unchanged since their run) and has no red file. A dropped file leaves the index with `video_ci.py <file> --slug <video> --stage <stage> --forget`; `--skip-ci "<why>"` passes the gate only when the human asked for the file as it is, and the reason is logged.
+- `videos.py set` refuses `review` / `done` on master, formats, wide, clips, generate, qc and publish unless the stage's CI index is fresh (files unchanged since their run) and has no red file. A dropped file leaves the index with `video_ci.py <file> --slug <video> --stage <stage> --forget`; `--skip-ci "<why>"` passes the gate only when the human asked for the file as it is, and the reason is logged.
 - Cost: the tech tier is local and free; the visual tier is a paid API call (~$0.005 per short, at most $0.50 per file). Ask the human once per project for a standing go-ahead, record it in the project's style or house notes, then run CI without asking. Without it: `--no-visual "no go-ahead yet"` (the file is at best amber).
 
 Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md).
@@ -59,7 +71,7 @@ Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROO
 - Grade per set: a look never crosses shoots or sets (lighting differs).
 - One render chain at a time; check free RAM first (< 4 GB → wait; ≥ 10 GB for heavy stages when browser renders, speech models or local generation share the machine). Background jobs longer than ~10 min get a periodic check that they are still moving, and an expected finish time at launch.
 - Other agents, sessions and the human share the project: check who is on a video before writing, never edit a script a running job uses, hold the render lock for every GPU-heavy job, brief sub-agents with the CI rule, and tell the human where everything is: [working](${CLAUDE_PLUGIN_ROOT}/references/working.md). ffmpeg traps: [ffmpeg](${CLAUDE_PLUGIN_ROOT}/references/ffmpeg.md); install: [setup](${CLAUDE_PLUGIN_ROOT}/references/setup.md).
-- NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's.
+- NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's. A timeline's name carries its format (`<Video> 9x16`, `<Video> 16x9`, `<Video> 9x16 S01 <topic>`); the 16x9 and the shorts come from the approved 9x16, never cut apart from it.
 - DaVinci Resolve: load `/videos:resolve` before the first MCP call of a session. A timed-out script keeps running, one Resolve is shared with the human and other sessions, and many calls fail silently; its log ([resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md)) lists every failed attempt with what to do instead.
 - Camera changes on a multicam edit = the multicam clip's active angle, never another camera's clip on a track above it (Resolve: `scripts/resolve_multicam_angles.py`).
 - Graphics are layers; compositing happens in the NLE. Anything drawn over footage (motion graphics, cards, labels, highlight boxes, hook and end cards, designed captions) renders alone with alpha (HyperFrames `--format mov` = ProRes 4444 + alpha, transparent root), on a canvas the size of the target timeline with the element at its default place (Resolve scales a smaller clip up to fit the frame), and goes on its own named track above the picture, where the human can move, scale, trim or drop it without a re-render. Changes to the footage itself (zooms, punch-ins, reframes, blurs and redactions, PiP of another camera, transitions, grade) are made on the clips in the NLE, never baked into a rendered copy of the cut. Bake graphics into one rendered video only for motion-only pieces with no footage under them, or a hands-off batch the human asked for. [layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md)

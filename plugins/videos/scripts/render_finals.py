@@ -2,9 +2,12 @@
 from a shell it only prints the snippet (rendering is the human's call: run it once the timeline is approved).
 
 Per timeline: Edit page, check the audio tracks (only the track whose name starts with ARGS audio_track enabled, when
-given), load a STOCK preset by timeline width ("YouTube - 2160p" for >= 3840 wide, else "YouTube - 1080p"), then set
-only TargetDir / CustomName. Why stock first: after audio-only renders a hand-built H.264 job rendered audio only
-while the job list claimed video. The stock YouTube presets give H.264, ~11 Mbps at 4K, a keyframe every 24 frames.
+given), load a STOCK preset by timeline size ("YouTube - 2160p" when the long side is >= 3840, else "YouTube - 1080p"),
+then set only TargetDir / CustomName, plus the frame size on a vertical (9x16) timeline, since the stock presets are
+landscape. A job whose size differs from its timeline's is deleted, never rendered. Why stock first: after audio-only
+renders a hand-built H.264 job rendered audio only while the job list claimed video. The stock YouTube presets give
+H.264, ~11 Mbps at 4K, a keyframe every 24 frames. Name the timelines by format ("Studio tour 9x16", "Studio tour 16x9",
+shorts "Studio tour 9x16 S01 …"): prefix "Studio tour 9x16 S" renders every short of the video.
 Output name = slug of the timeline name (lowercase letters, digits, hyphens) + ARGS suffix.
 ARGS: {"timelines": [names] | "prefix": "...", "target_dir": "...", "audio_track": "MASTER" (optional),
        "suffix": "-master", "start": true}
@@ -47,12 +50,23 @@ def run_in_resolve(resolve, args):
             if not ok or not any(nm.startswith(args["audio_track"]) for nm in names):
                 report.append({"timeline": name, "skipped": f"audio tracks enabled {on} names {names}"})
                 continue
-        wide = int(t.GetSetting("timelineResolutionWidth") or 0) >= 3840
+        w = int(float(t.GetSetting("timelineResolutionWidth") or 0))
+        h = int(float(t.GetSetting("timelineResolutionHeight") or 0))
+        wide = max(w, h) >= 3840
         p.LoadRenderPreset(args.get("preset_wide", "YouTube - 2160p") if wide else args.get("preset", "YouTube - 1080p"))
         fname = slug(name) + args.get("suffix", "")
-        ok = p.SetRenderSettings({"SelectAllFrames": True, "TargetDir": out, "CustomName": fname, "ExportSubtitle": False})
+        s = {"SelectAllFrames": True, "TargetDir": out, "CustomName": fname, "ExportSubtitle": False}
+        if h > w:  # vertical (9x16) timeline: the stock YouTube presets are landscape, so the size follows the timeline
+            s.update(FormatWidth=w, FormatHeight=h)
+        ok = p.SetRenderSettings(s)
         jid = p.AddRenderJob()
         j = next((x for x in p.GetRenderJobList() if x["JobId"] == jid), {})
+        size = (j.get("FormatWidth"), j.get("FormatHeight"))
+        if w and h and all(size) and tuple(map(int, size)) != (w, h):  # never a 9x16 cut in a landscape frame
+            p.DeleteRenderJob(jid)
+            report.append({"timeline": name, "skipped": f"job size {size[0]}x{size[1]} != timeline {w}x{h}: job deleted",
+                           "settings_ok": ok})
+            continue
         jobs.append(jid)
         report.append({"timeline": name, "file": f"{out}/{fname}.mp4", "settings_ok": ok,
                        "job": {k: j.get(k) for k in ("FormatWidth", "FormatHeight", "FrameRate", "VideoCodec", "AudioCodec",

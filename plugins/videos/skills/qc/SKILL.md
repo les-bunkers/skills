@@ -8,7 +8,7 @@ argument-hint: "[video name or file]"
 
 ## Which checker
 
-Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <master|formats|clips>` (spec, loudness, black / frozen / silent stretches, then hook, closing text, caption on a face, face framing, grade, secrets, text colliding or cut by the frame edge after each transition, overlay text too small for a phone; `--events` adds graphic in/out times, `--input` makes the gate refuse a final whose spec or project changed). Its indexes are what `qc done` checks ([ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md)). The rows below are the deeper checks per stage.
+Video CI first, on every file that ships: `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/video_ci.py" <files> --slug <video> --stage <master|formats|wide|clips>` (spec, loudness, black / frozen / silent stretches, then hook, closing text, caption on a face, face framing, grade, secrets, text colliding or cut by the frame edge after each transition, overlay text too small for a phone; `--events` adds graphic in/out times, `--input` makes the gate refuse a final whose spec or project changed). Its indexes are what `qc done` checks ([ci](${CLAUDE_PLUGIN_ROOT}/references/ci.md)). The rows below are the deeper checks per stage.
 
 | File | Check | Pass |
 |---|---|---|

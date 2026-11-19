@@ -7,6 +7,10 @@ argument-hint: "[job folder] [timeline name ...]"
 Speech cleanup for any shoot edited in DaVinci Resolve. Everything runs locally (no paid calls); source media is
 never modified; every output lands in a job folder.
 
+One master serves every format of a cut: with the videos plugin a video is cut as the long 9:16 first (`<Video> 9x16`),
+so plan and place on that timeline; the 16:9 made from the approved 9:16 has the same cut and keeps (or re-places at
+frame 0) the same mastered track. Clean again only when the cut itself changed.
+
 Plugin files: `${CLAUDE_PLUGIN_ROOT}/scripts/` (Claude Code substitutes the path, forward slashes on Windows). If
 the text still shows `${CLAUDE_PLUGIN_ROOT}` literally, Glob `**/audio-cleanup/scripts/cleanup.py` and use its
 folder. References live in `${CLAUDE_PLUGIN_ROOT}/references/`: install, GPU and speed figures in

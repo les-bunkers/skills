@@ -14,6 +14,7 @@ The same `<slug>` names the record, the published folder and the media folder. S
 <project>/artifacts/videos/                published
   index.md        table: video · campaign · formats · status · record
   <slug>/release.md + <slug>-9x16.mp4 · -16x9.mp4 · -4x3.mp4 · -cover.jpg · .srt · -share.mp4
+  <slug>-s01-<topic>/  a short cut from the long 9x16: its own release.md, -9x16.mp4, -cover.jpg
 <media_root>/<workspace>/videos/<slug>/    heavy media: rush links, masters, HyperFrames projects, renders
 ```
 
@@ -34,12 +35,14 @@ talent: Host name
 style: docs/edit_style.md     # taste files the stages read, space-separated paths
 code: footage/2026-03-02/rough-cut
 media: /mnt/media/acme/videos/launch-03-studio-tour
-resolve: Acme project / Studio tour       # project / working timeline (the video's plain name, in 01 Timelines/WIP/Latest)
+resolve: Acme project / Studio tour 9x16  # project / working timeline (the video's name + format, in 01 Timelines/WIP/Latest)
 brief: done 2026-03-02        # one key per stage: status word + date or note
-generate: …  ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  master: …  formats: …  clips: …  qc: …  publish: …
+generate: …  ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  formats: …  master: …  wide: …  clips: …  qc: …  publish: …
 next: editor reviews the tighten markers (pink first)
 updated: 2026-03-04
 ```
+
+The board shows the stage someone is on (`doing`, `review`, `blocked`), else the first one left to do; once master is `done` on a talking-head video it shows wide and clips together.
 
 Status = the first word of a stage value:
 
@@ -60,9 +63,9 @@ The stages a kind doesn't use start as `skip`.
 
 | Kind | Stages |
 |---|---|
-| talking-head | brief ingest transcribe rough tighten audio grade master formats qc publish |
+| talking-head | brief ingest transcribe rough tighten audio grade formats master wide clips qc publish (rough → formats on the long `<Video> 9x16`; master = the human approves it, frozen and rendered; then wide (the 16x9) and clips (shorts) side by side, both made from the approved 9x16; clips `skip` when no shorts are wanted) |
 | clip-batch | brief transcribe rough audio grade clips qc publish (one record for the batch; every published clip gets its own `artifacts/videos/<slug>/`) |
-| clip | brief transcribe rough audio grade formats qc publish (one vertical made by hand) |
+| clip | brief transcribe rough audio grade formats qc publish (one vertical made by hand, not cut from a long video) |
 | motion | brief audio formats qc publish (graphics-led: offer video, bumper, explainer) |
 | generative | brief generate audio formats qc publish (AI video: scene options, storyboard, character/set references, voices, keyframes, animatic, shot clips in `generate`; paid models → ask first) |
 

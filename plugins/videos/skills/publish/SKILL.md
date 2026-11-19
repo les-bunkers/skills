@@ -21,6 +21,9 @@ disable-model-invocation: true
    Ad variants (`variants.py`): one ad draft per variant, same caption, audience, budget and placements, only the video differs, named `<slug>-<variant id>`. Fill the `## Variants` table of release.md from `<out>/variants.json` (id, hook text, CTA text, format, file, ad draft id; the base row is the control). The human publishes the drafts and calls the winner.
 7. `videos.py set <slug> publish "review <human>: ready in artifacts/videos/<slug>"`. After posting: release.md `status: posted`, `posted: ig=<url> yt=<url>`, then `videos.py set <slug> publish "done <date>"`.
 
-## Clip batches
+## Shorts and clip batches
+
+A short cut from the long 9x16 (`/videos:clips` route A) ships as its own `artifacts/videos/<slug>-s<NN>-<topic>/` (`<slug>-s<NN>-<topic>-9x16.mp4`, cover, share copy, release.md with `source:` the long video's record); the long video's release.md lists its shorts. The long 9x16 and the 16x9 ship together in `artifacts/videos/<slug>/`.
+
 
 The `/vertical-clips` export writes each approved clip into its own `artifacts/videos/<clip-slug>/` (video, cover, share copy, release.md with post text and date) and the index.

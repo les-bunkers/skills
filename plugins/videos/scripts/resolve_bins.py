@@ -7,10 +7,11 @@ and human. Runs inside Resolve through Blackmagic's Resolve MCP (`run_script_uns
     result = B.audit(project)                                              # what breaks the layout
 
 Layout (paths from the media-pool root; the numbers keep the order in every sort mode):
-  01 Timelines/WIP/Latest    working timelines, plain name = the video ("Teleprompter demo"). A variant waiting for a
-                             choice = "<Video> - <variant>" ("Teleprompter demo - split panels").
-  01 Timelines/WIP/Archive   history: "<Video> vNN YYYY-MM-DD <state>" ("Teleprompter demo v02 2026-03-04 rough").
-                             NN counts up per video and is never reused.
+  01 Timelines/WIP/Latest    working timelines, name = the video + its format ("Teleprompter demo 9x16",
+                             "Teleprompter demo 16x9"); a short cut from the long vertical = "<Video> 9x16 S01 <topic>";
+                             a variant waiting for a choice = "<Video> 9x16 - <variant>". tl_name() builds these.
+  01 Timelines/WIP/Archive   history: "<working name> vNN YYYY-MM-DD <state>" ("Teleprompter demo 9x16 v02 2026-03-04
+                             rough"). NN counts up per working timeline and is never reused.
   01 Timelines/Final         approved cuts, same name pattern with state "approved" (made on the first approval).
   01 Timelines/Scratch       tests and throwaways.
   02 Footage/<YYYY-MM-DD place or subject>/[<concept>/]<take or source>/    camera and audio files as shot
@@ -23,7 +24,10 @@ Rules:
   - Before a big edit: snapshot(). The copy goes to the archive under a versioned name; the working timeline keeps its
     name and its place, so every pointer to it (records, scripts, the human's habit) stays right.
   - Keywords on every item (Resolve shows one smart bin per keyword): the video name, the shoot, the kind (timeline /
-    latest / archive / rough / tight / camera / audio track / multicam / graphic / voice / subtitle …).
+    latest / archive / rough / tight / camera / audio track / multicam / graphic / voice / subtitle …); timelines also
+    carry their format (9x16 / 16x9 / 4x3) and shorts "short".
+  - The format in a timeline's name matches its resolution (audit checks it). A video is cut as the long 9x16 first;
+    the 16x9 and the shorts are made from the approved 9x16 (references/resolve.md § Organization).
   - Nothing at the pool root, no other top-level bin, no "/" in a bin name.
   - Moves go through move(): `MoveClips` / `MoveFolders` COPY when Resolve's window believes Alt is down.
 """
@@ -38,11 +42,81 @@ ASSET_KINDS = ("Images", "Videos", "Music", "SFX", "Voice", "Subtitles")
 VERSION = re.compile(r"^(?P<video>.+) v(?P<n>\d{2,3}) (?P<date>\d{4}-\d{2}-\d{2})(?: (?P<state>.+))?$")
 PLACE_WORDS = ("timeline", "latest", "archive", "final", "scratch")
 STATES = ("rough", "tight", "graded", "mastered", "approved")  # read back from a timeline's keywords; others: pass state
+# Timeline size per format. 9x16 = the long vertical every video is cut as first, and its shorts; 16x9 is made from the
+# approved 9x16 (a 16x9 project's own UHD or HD size is kept); 4x3 only when a platform asks for it.
+FORMATS = {"9x16": (1080, 1920), "16x9": (3840, 2160), "4x3": (1440, 1080)}
+FORMAT_WORDS = tuple(FORMATS)
+# "<video> <fmt>[ S<nn>[ <label>]][ - <variant>]" (the version suffix is stripped first, VERSION)
+NAME = re.compile(r"^(?P<video>.+?) (?P<fmt>9x16|16x9|4x3)(?: S(?P<short>\d{2,3})(?: (?P<label>.+?))?)?(?: - (?P<variant>.+))?$")
 
 
 def clean(name):
     """A bin or timeline name without path separators (a "/" in a bin name breaks every path lookup)."""
     return re.sub(r"\s*[\\/:]+\s*", " - ", str(name)).strip()
+
+
+def tl_name(video, fmt, short=None, label=None, variant=None):
+    """Working timeline name: tl_name("Teleprompter demo", "9x16") -> "Teleprompter demo 9x16";
+    tl_name("Teleprompter demo", "9x16", 1, "price objection") -> "Teleprompter demo 9x16 S01 price objection"."""
+    if fmt not in FORMATS:
+        raise ValueError(f"format must be one of {', '.join(FORMATS)} (got {fmt!r})")
+    s = f"{clean(video)} {fmt}"
+    if short is not None:
+        s += f" S{int(short):02d}" + (f" {clean(label)}" if label else "")
+    return s + (f" - {clean(variant)}" if variant else "")
+
+
+def parse(name):
+    """What a timeline name says: video, fmt, short, label, variant, and version / date / state for an archived one.
+    A name from before formats were named (no format token) gives fmt None and the whole base as the video."""
+    out = {"name": name, "version": None, "date": None, "state": None}
+    base = name or ""
+    m = VERSION.match(base)
+    if m:
+        base = m.group("video")
+        out.update(version=int(m.group("n")), date=m.group("date"), state=m.group("state"))
+    n = NAME.match(base)
+    if n:
+        out.update(base=base, video=n.group("video"), fmt=n.group("fmt"),
+                   short=int(n.group("short")) if n.group("short") else None, label=n.group("label"), variant=n.group("variant"))
+    else:
+        video, _, variant = base.partition(" - ")
+        out.update(base=base, video=video, fmt=None, short=None, label=None, variant=variant or None)
+    return out
+
+
+def with_format(name, fmt):
+    """`name` with its format token set to `fmt` (added when missing, replaced when another): a cut list read back from
+    "Demo 9x16" builds "Demo 16x9"."""
+    p = parse(name)
+    if p["fmt"] == fmt:
+        return name
+    return tl_name(p["video"], fmt, p["short"], p["label"], p["variant"])
+
+
+def fmt_of(tl, project=None):
+    """The format a timeline's resolution makes (9x16 / 16x9 / 4x3), or None when it is none of them."""
+    def num(src, key):
+        try:
+            return int(float(src.GetSetting(key) or 0))
+        except Exception:
+            return 0
+    w, h = num(tl, "timelineResolutionWidth"), num(tl, "timelineResolutionHeight")
+    if not (w and h) and project is not None:
+        w, h = num(project, "timelineResolutionWidth"), num(project, "timelineResolutionHeight")
+    if not (w and h):
+        return None
+    r = w / h
+    for fmt, (fw, fh) in FORMATS.items():
+        if abs(r - fw / fh) < 0.02:
+            return fmt
+    return None
+
+
+def timeline_words(name):
+    """Keywords a timeline carries besides its place and state: the video, its format, "short" for a short."""
+    p = parse(name)
+    return [p["video"], p["fmt"], "short" if p["short"] is not None else None]
 
 
 def find_bin(mp, path):
@@ -142,12 +216,14 @@ def timeline(project, name):
 
 
 def versions(project, video):
-    """Version numbers already used for this video, sorted (archive and final names)."""
+    """Version numbers already used for this working timeline name, sorted (archive and final names). Versions
+    archived before the name carried a format ("Demo v04 …" for "Demo 16x9") count too, so numbers keep going up."""
+    legacy = parse(video)["video"] if parse(video)["fmt"] else None
     out = []
     for i in range(1, project.GetTimelineCount() + 1):
         t = project.GetTimelineByIndex(i)
         m = VERSION.match(t.GetName() or "") if t else None
-        if m and m.group("video") == video:
+        if m and (m.group("video") == video or (legacy and m.group("video") == legacy)):
             out.append(int(m.group("n")))
     return sorted(out)
 
@@ -184,7 +260,8 @@ def snapshot(resolve, project, name, state=None, to=ARCHIVE, date=None):
         r = move(resolve, project, [item], to)
         if "error" in r:
             return {**r, "snapshot": new, "note": "the copy exists and was not filed"}
-        tag(item, name, "timeline", to.rsplit("/", 1)[-1].lower(), state, drop=PLACE_WORDS + STATES)
+        tag(item, *timeline_words(name), "timeline", to.rsplit("/", 1)[-1].lower(), state,
+            drop=PLACE_WORDS + STATES + FORMAT_WORDS)
     finally:
         if cur_tl:
             project.SetCurrentTimeline(cur_tl)
@@ -211,11 +288,36 @@ def archive(resolve, project, name, state=None, date=None):
         tl.SetName(new)
         if tl.GetName() != new:
             return {"error": "moved to the archive, rename failed", "name": new}
-        tag(item, name, "timeline", "archive", state, drop=PLACE_WORDS + STATES)
+        tag(item, *timeline_words(name), "timeline", "archive", state, drop=PLACE_WORDS + STATES + FORMAT_WORDS)
         return {"archived": new, "version": n, "bin": ARCHIVE}
     finally:
         if cur:
             project.SetCurrentTimeline(cur)
+
+
+def add_format(project, name):
+    """A working timeline named before formats were named ("Demo", "Demo - panels") gets the format its resolution
+    makes ("Demo 16x9", "Demo 16x9 - panels") and the matching keywords. Archived names stay as they are (history).
+    Update the record's `resolve:` after."""
+    tl = timeline(project, name)
+    if tl is None:
+        return {"error": f"no timeline {name!r}"}
+    p = parse(name)
+    if p["fmt"] or p["version"]:
+        return {"name": name, "unchanged": "already named with a format" if p["fmt"] else "archived name"}
+    fmt = fmt_of(tl, project)
+    if not fmt:
+        return {"error": f"{name!r}: resolution matches no format", "formats": FORMATS}
+    new = tl_name(p["video"], fmt, variant=p["variant"])
+    if timeline(project, new) is not None:
+        return {"error": f"a timeline {new!r} exists already"}
+    tl.SetName(new)
+    if tl.GetName() != new:
+        return {"error": "rename failed", "name": name}
+    item = tl.GetMediaPoolItem()
+    if item:
+        tag(item, *timeline_words(new), drop=FORMAT_WORDS)
+    return {"renamed": name, "to": new, "fmt": fmt}
 
 
 def file_name(item):
@@ -270,7 +372,13 @@ def audit(project, sample=10):
     found = {"stray_top_bins": [s.GetName() for s in root.GetSubFolderList() or [] if s.GetName() not in (TIMELINES, FOOTAGE, ASSETS)],
              "items_at_root": [c.GetName() for c in root.GetClipList() or []],
              "bin_names_with_slash": [], "timelines_outside_01": [], "versioned_name_in_latest": [],
-             "archive_name_off_pattern": [], "footage_clip_renamed": [], "without_keywords": []}
+             "archive_name_off_pattern": [], "latest_without_format": [], "format_not_resolution": [],
+             "footage_clip_renamed": [], "without_keywords": []}
+    tls = {}
+    for i in range(1, project.GetTimelineCount() + 1):
+        t = project.GetTimelineByIndex(i)
+        if t:
+            tls[t.GetName()] = t
 
     def bins(f):
         for s in f.GetSubFolderList() or []:
@@ -289,6 +397,11 @@ def audit(project, sample=10):
                 found["versioned_name_in_latest"].append(name)
             elif path in (ARCHIVE, FINAL) and not VERSION.match(name):
                 found["archive_name_off_pattern"].append(name)
+            elif path == LATEST and not parse(name)["fmt"]:
+                found["latest_without_format"].append(name)  # fix: add_format(project, name)
+            fmt, tl = parse(name)["fmt"], tls.get(name)
+            if fmt and tl is not None and fmt_of(tl, project) not in (None, fmt):
+                found["format_not_resolution"].append(f"{name} (resolution makes {fmt_of(tl, project)})")
         elif path.startswith(FOOTAGE) and kind not in ("Subtitle", "Multicam", "Compound"):
             fn = file_name(c)
             if fn and name.lower() not in (fn.lower(), os.path.splitext(fn)[0].lower()):
