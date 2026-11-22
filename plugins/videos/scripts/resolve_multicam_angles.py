@@ -494,20 +494,35 @@ def switch_angles(resolve, project, timeline, switches=(), from_tracks=False, ou
         # 5. checks: equal to the work copy, angles as asked
         sa, sb = _snap(work), _snap(nt)
         diff = sorted(k for k in set(sa) | set(sb) if sa.get(k) != sb.get(k))
-        names = {}
+        names, known = {}, {}
         for v in v1b:
             for x in angles_of(info2, v["ref"]):
                 names[(v["ref"], x["n"])] = x["names"][0] if x["names"] else ""
+                known.setdefault(v["ref"], set()).update(x["names"])
         refs = {v["start"]: v["ref"] for v in v1b}
         final = {**{v["start"]: v["angle"] for v in v1b}, **want_at}
-        wrong = []
+        wrong, by_blob = [], []
         for i in nt.GetItemListInTrack("video", 1) or []:
             k = int(round(i.GetStart()))
             if k in refs:
-                exp = names.get((refs[k], final.get(k, 1)), "")
-                if exp and not (i.GetName() or "").endswith(" - " + exp):
-                    wrong.append((k - st, final.get(k), (i.GetName() or "")[-40:]))
-        rep.update(diff=diff, wrong=wrong[:10], n_wrong=len(wrong), angles_set=len(want))
+                exp, got = names.get((refs[k], final.get(k, 1)), ""), i.GetName() or ""
+                if not exp:
+                    continue
+                if not any(got.endswith(" - " + nm) for nm in known.get(refs[k], ())):
+                    # the API names this multicam's angles otherwise than its .drt (angle clips renamed after the
+                    # multicam was made): the readback proves nothing, read the angle the imported timeline stores
+                    by_blob.append(k)
+                elif not got.endswith(" - " + exp):
+                    wrong.append((k - st, final.get(k), got[-40:]))
+        if by_blob:
+            p_chk = os.path.join(wd, f"{tag}_check.drt")
+            if not nt.Export(p_chk, resolve.EXPORT_DRT, resolve.EXPORT_NONE):
+                raise RuntimeError("drt export (check) failed")
+            info3 = read_drt(p_chk)
+            stored = {it["start"]: it["angle"] for it in info3["seqs"][info3["timeline_seq"]]["video"][0]}
+            wrong += [(k - st, final.get(k), f"stored angle {stored.get(k)}") for k in by_blob
+                      if stored.get(k) != final.get(k, 1)]
+        rep.update(diff=diff, wrong=wrong[:10], n_wrong=len(wrong), angles_set=len(want), checked_by_drt=len(by_blob))
         if diff or wrong:
             mp.DeleteTimelines([nt])
             raise RuntimeError("round trip check failed (result deleted, original untouched)")

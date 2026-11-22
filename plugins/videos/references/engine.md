@@ -34,7 +34,7 @@ checks/joins.json, checks/master.json                                     join_c
 | `phrase_trims.py` | checks the agent's spans, prints each cut as it reads, `--apply` → overrides | free |
 | `tighten.py` | the tighten pass → tight Cut list + SRT + report | ~10 s for 20 min of cut |
 | `join_check.py` | level at every join (pass: none > 35 dB over floor) | light |
-| `resolve_build.py` | Cut list → Resolve: import, multicam, build, review markers, inspect; `--dry-run` plan | runs inside Resolve |
+| `resolve_build.py` | Cut list → Resolve: import, multicam, build, take picker + read picks, review markers, inspect, read cuts; `--dry-run` plan | runs inside Resolve |
 | `render_finals.py` | queue + start renders from approved timelines (stock preset) | runs inside Resolve |
 | `finals_check.py` | master file: frames, loudness, content vs the cut list at lag | light |
 | `sync_check.py` | lag between two renders, several windows | light |
@@ -100,15 +100,17 @@ checks/joins.json, checks/master.json                                     join_c
  "end_note": "what was cut and why"}
 ```
 
-Anchor = (approx second on the words clock, phrase). Matching is on accent-stripped letters, starting on a word boundary, nearest to the approx time within ±12 s (an elided token is ONE word: « qu'on a des » matches, « on a des » inside « qu'on » does not; start the anchor at the whole token); `*` = any one word. Pads 0.12 s in / 0.25 s out, clamped to the midpoint with the neighbour word, then floor/ceil to frames. Options: `face`, `alt` (placed after a 2 s gap at the end, Purple marker), `head` / `tail` (pads), `why`. Marker colours used: Blue chapters · Green short candidates · Yellow claims to check · Red end of cut (+ what was cut) · Purple alternates.
+Anchor = (approx second on the words clock, phrase). Matching is on accent-stripped letters, starting on a word boundary, nearest to the approx time within ±12 s (an elided token is ONE word: « qu'on a des » matches, « on a des » inside « qu'on » does not; start the anchor at the whole token); `*` = any one word. Pads 0.12 s in / 0.25 s out, clamped to the midpoint with the neighbour word, then floor/ceil to frames. Options: `face`, `cam` (an angle name of the source, or `program`: shown for the whole segment, set by picks), `takes` (the same passage in other recordings, `[[src, [s, "phrase"], [s, "phrase"]], …]`: the segment's own range = take 1, the default; a segment with takes never merges with its neighbour), `alt` (placed after a 2 s gap at the end, Purple marker), `head` / `tail` (pads), `why`.
+
+Take picker: `resolve_build.py --mode takes` builds `<name> - takes` from the rough cut list (one V1 clip per main segment, its takes = every camera of every take, plain camera files, all padded to the segment's longest take, take 1 = the segment's range on its `cam` / face angle); `--mode read_takes --out picks.json` reads what each clip plays (by file, in clip order) → `{"timeline", "picks": [{"seg", "specs", "src", "cam", "take", "changed", "first"}], "unknown"}`; `rough.py --picks picks.json --out …` writes them into rough.json (picked take ↔ the segment's own range, the others stay in `takes`; `cam` replaces `face`; previous file kept as `<spec>.before-picks.json`). A marker anchored in a take that is no longer played lands at the same fraction of the picked take. Marker colours used: Blue chapters · Green short candidates · Yellow claims to check · Red end of cut (+ what was cut) · Purple alternates.
 
 ## Cut lists
 
 Shared format (CONTRIBUTING): `{"fps", "sources": {id: file}, "segments": [{"src", "in", "out", "why"}]}`. The engine adds fields:
 
 - top level: `timeline`, `alt_gap_s`, `markers` ([{frame, color, name, note, kind?}], frames from the timeline start; `kind: "end"` = moves to the new end on tighten), `main_s`, `total_f`, `srt`.
-- rough segment: `in_f`, `out_f` (source frames, exact), `rec_f` (timeline frame), `face`, `alt`, `first` / `last` / `cut_before` / `cut_after` (the seam text).
-- tight part (one per kept stretch): `in_f`/`out_f`/`rec_f` = sound on whole frames; `v_in_f`/`v_out_f`/`v_rec_f` = picture (J-cut: the next part's picture starts `J` frames after its sound, the outgoing picture runs on over removed silence); `a_in_f`/`a_out_f`/`a_rec_f` = exact sound edges in fractional frames (cuts inside the voice); `xf` = 1-frame cross fade at its end; `sync_f` = picture/sound offset; `fade_in`; `angle` = V3 camera piece {name, file, delay_f, max_f}.
+- rough segment: `in_f`, `out_f` (source frames, exact), `rec_f` (timeline frame), `face`, `cam`, `alt`, `specs` (indexes of the rough.json segments merged into it), `takes` ([{src, in_f, out_f, first, last}], take 1 = this segment), `first` / `last` / `cut_before` / `cut_after` (the seam text).
+- tight part (one per kept stretch): `in_f`/`out_f`/`rec_f` = sound on whole frames; `v_in_f`/`v_out_f`/`v_rec_f` = picture (J-cut: the next part's picture starts `J` frames after its sound, the outgoing picture runs on over removed silence); `a_in_f`/`a_out_f`/`a_rec_f` = exact sound edges in fractional frames (cuts inside the voice); `xf` = 1-frame cross fade at its end; `sync_f` = picture/sound offset; `fade_in`; `angle` = V3 camera piece {name, file, delay_f, max_f}; a part of a `cam` segment keeps that camera (no rotation, no cutaway).
 - tight extras: `cuts` (every removal: timeline s, source s on the words clock, length, kinds, words around), `spare`, `phrases`, `fillers_timed` (with why kept), `flags` (voice the transcript lacks: listen), `angles` (counts), `before_main_s`.
 
 Cut kinds: `breath` (heard by the DSP) · `breath (ears)` · `breath glued (ears)` (inhale running into a word) · `filler` (written in the transcript) · `filler (audio)` (held vowel the DSP heard) · `filler (timed)` / `(timed, tight)` / `(timed, in the voice)` (timed-fillers file) · `dead air` · `spare word` · `phrase` / `phrase (tight)`.

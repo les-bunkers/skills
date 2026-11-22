@@ -229,6 +229,19 @@ Not yet run end to end: read every step back, and log what fails here.
   - ✗ **DRT field `CurrentSelectorIdx`** → thumbnail data, not the angle. The angle is in the item's `FieldsBlob` (`"Camera N"`); raw (0x80) on appended items, zstd (0x81) on items SmartSwitch wrote.
   - ✗ **OTIO export to read angles** → each multicam item becomes a stack holding every angle as an enabled track; no field names the active one.
 - Multicam items have no file path: ✗ **tools that map timeline items to files** skip every one → render the track as it plays (Audio Only preset) and work on that mixdown.
+- ✗ **Angle readback by name against the `.drt` angle names** → a multicam whose angle clips were renamed after it was made lists the old names in its `.drt` sequence while the API reads the new ones (`<multicam> - 3 Left · …`): a correct switch failed the check → when the readback matches none of the `.drt` names, export the imported timeline again and read the stored `"Camera N"` (`resolve_multicam_angles.py` does: `checked_by_drt`).
+
+## Take selector
+
+The human picks takes in Resolve (right-click a clip → Take Selector); `resolve_build.py --mode takes / read_takes` builds the picker and reads the picks ([engine](engine.md) § rough.json).
+
+- `item.AddTake(mediaPoolItem, startFrame, endFrame)` on a placed clip: the first call makes it a take-selector clip whose placed range = take 1. `GetTakesCount()`, `GetTakeByIndex(i)` → `{startFrame, endFrame, mediaPoolItem}`, `SelectTakeByIndex(i)`, `GetSelectedTakeIndex()`, `DeleteTakeByIndex(i)`, `FinalizeTake()` (→ a plain clip, range and sound kept). A `.drt` export keeps the takes (item `FieldsBlob`).
+- ✗ **Multicam clips as takes** → the API accepts them, the takes read back and survive a `.drt` round trip, but Resolve 21.2 crashed each time the human opened Take Selector on such a clip (twice) → offer plain camera files: one take per recording × camera; the build then puts the picked recording back as a multicam on the picked angle. A multicam item's angle is per clip, shared by all its takes, so multicam takes cannot carry a camera choice anyway.
+- ✗ **Takes of unequal length** → selecting a shorter take shrinks the clip, and a longer take picked afterwards plays cut to that length → every take of a clip as long as its longest (pad the end; clamp to the file).
+- ✗ **`GetTakesCount()` on a timeline that is not current** → 0, as if the takes were gone; `GetMediaPoolItem()` and the source getters still answer → set the timeline current before take getters; read picks from the item's media pool item (file path) in clip order, which needs no switch.
+- ✗ **`GetSelectedTakeIndex()` in a later call** → 0 on a clip still showing take 1 → identify the pick by the file it plays, never by index. `GetTakeByIndex` frames can differ by ±1 from the item's `GetSourceStartFrame()`: never match on exact frames.
+- Each take plays its own file's sound: fine for choosing, the build takes the sound from the program again.
+- `SaveProject()` after building the picker: the human works in it next.
 
 ## Audio edits
 

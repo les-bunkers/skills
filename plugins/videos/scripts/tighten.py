@@ -608,6 +608,12 @@ def plan_angles(segs):
     last_cut, face_i, face_since = -1e9, 0, -1e9
     for s in segs:
         s["angle"] = None
+        if s.get("cam"):  # the human picked this camera in the take picker: it holds for the whole part
+            a = P.angles(s["src"]).get(s["cam"]) if s["cam"] != "program" else None
+            if a and a["file"] and a["file"] != P.file(s["src"]):
+                s["angle"] = {"name": s["cam"], "file": a["file"], "delay_f": round((a["offset_s"] or 0.0) * FPS)}
+            face_since = -1e9
+            continue
         if not USE_CAMS:
             continue
         if s["src"] not in scans:

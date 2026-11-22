@@ -21,6 +21,17 @@ Modes (one per MCP call; each stays well under 60 s for a 20-min cut):
                   then turned into V1 angle switches in place by resolve_multicam_angles.switch_angles (from_tracks,
                   .drt round trip, verified; result "angles"). On failure the V2 / V3 clips stay (picture unchanged)
                   and "angles" says why. ARGS camera_tracks = True keeps V2 / V3 (old layout).
+                  A rough segment's cam (picked in the take picker) = that angle for the whole segment ("program" =
+                  angle 1, the program file); face = the source's face angle.
+  takes           the take picker "<name> - takes" (rough cut list): one clip per main segment on V1 whose takes are
+                  every camera of every take of that segment (rough.py takes; a segment without takes offers its own
+                  source's cameras), as plain camera clips, never multicam clips (Resolve 21.2 crashes when the human
+                  opens Take Selector on multicam takes). Take 1 = the segment's own range on its cam or face angle =
+                  the default. Every take as long as the segment's longest take (a take-selector clip never grows back
+                  after a shorter take: the longer ones would play cut). Blue marker per segment listing its takes.
+                  Saves the project before handing over. The human picks with right-click -> Take Selector.
+  read_takes      what the human left on each picker clip -> picks (ARGS out = path) for rough.py --picks: segment
+                  specs, source, camera. Reads file + order, so it works on a timeline that is not current.
   review_markers  one marker per tighten cut that needs ears (colours below) + Lavender at every J join
   inspect         V1/A1 items of the named timeline vs this cut list's plan: same = no hand edits, safe to rebuild
   read_cuts       the named timeline's A1 items as they are now -> Cut list on source frames (ARGS out = path):
@@ -38,7 +49,8 @@ mismatched sources "scaleToCrop": filled and centre-cropped). The size is set an
 temporary name first: a size that does not take leaves the working timeline untouched. Result "format" = want / got.
 
 ARGS keys: mode, project (edit.json), cuts (*.cuts.json), name (timeline name), format, replace, state (keyword and
-archive label of this build, default "tight" for a tight cut list, else "rough"), out (read_cuts), camera_tracks (build).
+archive label of this build, default "tight" for a tight cut list, else "rough"), out (read_cuts, read_takes),
+camera_tracks (build).
 edit.json "resolve": {"shoot": "2026-03-02 Studio"} = this shoot's folder under 02 Footage, named
 "<YYYY-MM-DD> <place or subject>" (the older key "root_bin" still reads as the shoot name). Review colours:
 Fuchsia phrase trim on a soft dip · Sand timed filler on a soft dip · Sky filler cut inside the voice (listen first)
@@ -108,11 +120,16 @@ def plan(P, cut, use_mc):
         if not tight:
             out["linked"].append({"clip": clip, "startFrame": s["in_f"] + off, "endFrame": s["out_f"] + off,
                                   "recordFrame": s["rec_f"], "trackIndex": 1})
-            if s.get("face") and face_file:
-                fi, fo, rec = s["in_f"] - d, s["out_f"] - d, s["rec_f"]
+            cam = s.get("cam") or (P.src(sid).get("face") if s.get("face") else None)  # cam = the human's pick
+            a = P.angles(sid).get(cam) if cam and cam != "program" else None
+            if cam and cam != "program" and not a:
+                out.setdefault("cam_unknown", []).append([sid, cam])
+            if a and a["file"] and a["file"] != P.file(sid):
+                da = round((a["offset_s"] or 0.0) * P.fps)
+                fi, fo, rec = s["in_f"] - da, s["out_f"] - da, s["rec_f"]
                 if fi < 0:
                     rec, fi = rec - fi, 0
-                out["face"].append({"clip": ("file", face_file), "startFrame": fi, "endFrame": fo, "recordFrame": rec,
+                out["face"].append({"clip": ("file", a["file"]), "startFrame": fi, "endFrame": fo, "recordFrame": rec,
                                     "trackIndex": 2, "mediaType": 1})
             continue
         if s.get("angle"):  # camera switch: that angle's own clip, synced, on V3
@@ -145,6 +162,46 @@ def plan(P, cut, use_mc):
     return out
 
 
+def picker_name(name):
+    """The take picker of a working timeline: "<Video> 9x16" -> "<Video> 9x16 - takes"."""
+    import resolve_bins as B
+    if name.endswith(" - takes"):
+        return name
+    p = B.parse(name)
+    return B.tl_name(p["video"], p["fmt"], p["short"], p["label"], "takes") if p["fmt"] else f"{name} - takes"
+
+
+def cams_of(P, sid, first=None):
+    """Every camera of a source as (name, file, delay_f), angle frame = program frame - delay_f: `first` (a picked
+    camera) or the face angle first, the other angles, the program file last (a program file that is also listed as
+    an angle counts once, as "program")."""
+    prog = P.file(sid)
+    lead = first or P.src(sid).get("face")
+    cams = [(n, a["file"], round((a["offset_s"] or 0.0) * P.fps)) for n, a in P.angles(sid).items()
+            if a["file"] and a["file"] != prog] + [("program", prog, 0)]
+    return sorted(cams, key=lambda c: c[0] != lead)  # stable: the lead camera first, the rest in edit.json order
+
+
+def picker_plan(P, cut):
+    """Take picker plan: one entry per main segment (alternates parked after the end are left out), its options =
+    every camera of every take, take 1 first, all `len_f` long (the segment's longest take, padded at the end).
+    startFrame / endFrame = each camera file's own frames (clamped to the file in Resolve)."""
+    out, rec = [], 0
+    for i, s in enumerate(x for x in cut["segments"] if not x.get("alt")):
+        takes = s.get("takes") or [{"src": s["src"], "in_f": s["in_f"], "out_f": s["out_f"],
+                                    "first": s.get("first", ""), "last": s.get("last", "")}]
+        n = max(t["out_f"] - t["in_f"] for t in takes)
+        opts = []
+        for tn, t in enumerate(takes, 1):
+            for cam, f, d in cams_of(P, t["src"], s.get("cam") if tn == 1 else None):
+                opts.append({"take": tn, "src": t["src"], "cam": cam, "file": f, "startFrame": t["in_f"] - d,
+                             "endFrame": t["in_f"] - d + n, "true_len_f": t["out_f"] - t["in_f"]})
+        out.append({"seg": i, "specs": s.get("specs", []), "rec_f": rec, "len_f": n, "first": s.get("first", ""),
+                    "options": opts})
+        rec += n
+    return out
+
+
 def review_plan(cut):
     fps = E.norm_fps(cut["fps"])
     marks = []
@@ -166,6 +223,8 @@ def summary(pl, marks=None):
     n = {"tight": pl["tight"], "V1": len(pl["pic"] or pl["linked"]), "A1": len(pl["snd"] or pl["linked"]),
          "V2_face": len(pl["face"]), "V3_cams": len(pl["cams"]), "xfade_joins": pl["xf"], "fade_in": pl["fade_in"],
          "markers": len(pl["markers"]), "length_f": pl["total_f"]}
+    if pl.get("cam_unknown"):
+        n["cam_unknown"] = pl["cam_unknown"]  # [source, cam] not among that source's angles: stays on the program
     if marks is not None:
         cnt = {}
         for m in marks:
@@ -322,6 +381,137 @@ def _run(resolve, project, args):
     def clip_of(c):
         return mcs[c[1]] if c[0] == "mc" else idx.get(key(c[1]))
 
+    def stage(name, tlbin, prev_name):
+        """New empty timeline with the format's own size, made under a temporary name first: a size that does not
+        take leaves every existing timeline untouched. -> (timeline, settings, None) or (None, settings, error)."""
+        w, h = B.FORMATS[fmt]
+        tmp = name + " (building)"
+        left = [t for t in timelines() if t and t.GetName() == tmp]  # a failed earlier run of this script
+        if left:
+            mp.DeleteTimelines(left)
+        mp.SetCurrentFolder(tlbin)
+        staged = mp.CreateEmptyTimeline(tmp)
+        if not staged:
+            return None, None, {"error": f"CreateEmptyTimeline({tmp!r}) failed: nothing built, {name!r} untouched"}
+        custom = {k: bool(staged.SetSetting(k, v)) for k, v in (
+            ("useCustomSettings", "1"), ("timelineResolutionWidth", str(w)), ("timelineResolutionHeight", str(h)),
+            ("timelineInputResMismatchBehavior", "scaleToCrop"))}  # sources of another aspect fill the frame
+        custom["size"] = f"{staged.GetSetting('timelineResolutionWidth')}x{staged.GetSetting('timelineResolutionHeight')}"
+        custom["mismatch"] = staged.GetSetting("timelineInputResMismatchBehavior")
+        if B.fmt_of(staged) != fmt:
+            mp.DeleteTimelines([staged])
+            back = next((t for t in timelines() if t and prev_name and t.GetName() == prev_name), None)
+            if back is not None:
+                project.SetCurrentTimeline(back)
+            return None, custom, {"error": f"the {fmt} size did not take on a new timeline: nothing built, "
+                                           f"{name!r} untouched", "settings": custom}
+        return staged, custom, None
+
+    if mode == "read_takes":  # file + order of the picker's V1 clips: no take getter, so no need to make it current
+        pname = picker_name(name)
+        tl = next((t for t in timelines() if t and t.GetName() == pname), None)
+        if tl is None:
+            return {"error": f"no take picker {pname!r}"}
+        pp = picker_plan(P, cut)
+        v1 = sorted(tl.GetItemListInTrack("video", 1) or [], key=lambda it: it.GetStart())
+        if len(v1) != len(pp):
+            return {"error": f"{len(v1)} clips on V1 of {pname!r}, the cut list has {len(pp)} segments (clips added "
+                             "or deleted by hand: rebuild the picker or match them by hand)"}
+        picks, unknown = [], []
+        for g, it in zip(pp, v1):
+            mpi = it.GetMediaPoolItem()
+            fp = key(mpi.GetClipProperty("File Path") or "") if mpi else ""
+            o = next((o for o in g["options"] if key(o["file"]) == fp), None)
+            if o is None:
+                unknown.append({"seg": g["seg"], "clip": mpi.GetName() if mpi else None})
+                continue
+            picks.append({"seg": g["seg"], "specs": g["specs"], "src": o["src"], "cam": o["cam"], "take": o["take"],
+                          "changed": o is not g["options"][0], "first": g["first"]})
+        out = {"timeline": pname, "picks": picks, "unknown": unknown}
+        if args.get("out"):
+            E.write_json(args["out"], out)
+        return {"timeline": pname, "picks": len(picks), "changed": sum(p["changed"] for p in picks),
+                "unknown": unknown, "out": args.get("out"),
+                "summary": [f"{p['seg'] + 1}: take {p['take']} {p['src']} {p['cam']}" for p in picks][:40]}
+
+    if mode == "takes":
+        pname = picker_name(name)
+        pp = picker_plan(P, cut)
+        missing = sorted({o["file"] for g in pp for o in g["options"] if idx.get(key(o["file"])) is None})
+        if missing:
+            return {"error": "camera files not in the media pool (run mode import)", "missing": missing}
+        old = [t for t in timelines() if t and t.GetName() == pname]
+        if old and not args.get("replace"):
+            return {"error": f"take picker {pname!r} exists", "hint": "it may hold the human's picks: read_takes first; "
+                    "replace = True files it in 01 Timelines/WIP/Archive and builds a new one"}
+        prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()
+        prev_name = prev_tl.GetName() if prev_tl is not None else None
+        tlbin = B.path_bin(mp, B.LATEST)
+        staged, custom = None, None
+        if fmt and B.fmt_of(project) != fmt:
+            staged, custom, err = stage(pname, tlbin, prev_name)
+            if err:
+                return err
+        archived = B.archive(resolve, project, pname) if old else None
+        if archived and "error" in archived:
+            if staged:
+                mp.DeleteTimelines([staged])
+            return {"error": "the existing picker could not be archived, nothing built", "archive": archived}
+        mp.SetCurrentFolder(tlbin)
+        if staged:
+            staged.SetName(pname)
+            if staged.GetName() != pname:
+                return {"error": f"built empty under {staged.GetName()!r}, rename to {pname!r} failed", "archived": archived}
+            tl = staged
+        else:
+            tl = mp.CreateEmptyTimeline(pname)
+        project.SetCurrentTimeline(tl)  # take getters read 0 on a timeline that is not current
+        st = tl.GetStartFrame()
+
+        def rng(clip, o, n):  # the planned range, kept inside the file and n frames long where the file allows
+            frames = int(float(clip.GetClipProperty("Frames") or 0)) or (o["endFrame"] + 1)
+            s = min(max(0, o["startFrame"]), max(0, frames - n))
+            return s, min(frames, s + n)
+        added, fail, counts = 0, [], []
+        for g in pp:
+            o0 = g["options"][0]
+            c0 = idx[key(o0["file"])]
+            s0, e0 = rng(c0, o0, g["len_f"])
+            mp.AppendToTimeline([{"mediaPoolItem": c0, "startFrame": s0, "endFrame": e0,
+                                  "recordFrame": st + g["rec_f"], "trackIndex": 1}])
+            v = next((it for it in tl.GetItemListInTrack("video", 1) or [] if it.GetStart() == st + g["rec_f"]), None)
+            if v is None:
+                fail.append({"seg": g["seg"], "error": "first take not placed"})
+                continue
+            for o in g["options"][1:]:
+                c = idx[key(o["file"])]
+                s, e = rng(c, o, g["len_f"])
+                if v.AddTake(c, s, e):
+                    added += 1
+                else:
+                    fail.append({"seg": g["seg"], "take": o["take"], "src": o["src"], "cam": o["cam"]})
+            counts.append(v.GetTakesCount())
+            note = " · ".join(f"{k} {o['src']} {o['cam']}" for k, o in enumerate(g["options"], 1))
+            tl.AddMarker(g["rec_f"], "Blue", f"{g['seg'] + 1}. {g['first'][:40]}", note[:1000], 1)
+        tl.SetTrackName("video", 1, "Takes (right-click a clip -> Take Selector)")
+        item = tl.GetMediaPoolItem()
+        if item:
+            B.tag(item, *B.timeline_words(pname), "timeline", "latest", "takes",
+                  drop=B.PLACE_WORDS + B.STATES + B.FORMAT_WORDS)
+        expected = [len(g["options"]) for g in pp]
+        saved = bool(resolve.GetProjectManager().SaveProject())  # a crash while the human picks loses nothing
+        report = {"timeline": pname, "bin": B.LATEST, "archived": archived, "segments": len(pp),
+                  "takes_per_clip": counts, "takes_expected": expected, "ok": counts == expected and not fail,
+                  "added": added, "fail": fail[:20], "len": tl.GetEndFrame() - st, "expected_len": sum(g["len_f"] for g in pp),
+                  "format": {"want": fmt, "got": B.fmt_of(tl, project), "settings": custom} if fmt else None,
+                  "markers": len(tl.GetMarkers() or {}), "saved": saved}
+        back = next((t for t in timelines() if t and prev_name and t.GetName() == prev_name), None)
+        if back is not None:
+            project.SetCurrentTimeline(back)
+        if prev_page:
+            resolve.OpenPage(prev_page)
+        return report
+
     if mode == "inspect":
         tl = next((t for t in timelines() if t and t.GetName() == name), None)
         if tl is None:
@@ -382,27 +572,9 @@ def _run(resolve, project, args):
     tlbin = B.path_bin(mp, B.LATEST)
     staged, custom = None, None
     if fmt and B.fmt_of(project) != fmt:  # the project's size makes another format: this timeline gets its own
-        w, h = B.FORMATS[fmt]
-        tmp = name + " (building)"
-        left = [t for t in timelines() if t and t.GetName() == tmp]  # a failed earlier run of this script
-        if left:
-            mp.DeleteTimelines(left)
-        mp.SetCurrentFolder(tlbin)
-        staged = mp.CreateEmptyTimeline(tmp)
-        if not staged:
-            return {"error": f"CreateEmptyTimeline({tmp!r}) failed: nothing built, {name!r} untouched"}
-        custom = {k: bool(staged.SetSetting(k, v)) for k, v in (
-            ("useCustomSettings", "1"), ("timelineResolutionWidth", str(w)), ("timelineResolutionHeight", str(h)),
-            ("timelineInputResMismatchBehavior", "scaleToCrop"))}  # sources of another aspect fill the frame
-        custom["size"] = f"{staged.GetSetting('timelineResolutionWidth')}x{staged.GetSetting('timelineResolutionHeight')}"
-        custom["mismatch"] = staged.GetSetting("timelineInputResMismatchBehavior")
-        if B.fmt_of(staged) != fmt:
-            mp.DeleteTimelines([staged])
-            back = next((t for t in timelines() if t and prev_name and t.GetName() == prev_name), None)
-            if back is not None:
-                project.SetCurrentTimeline(back)
-            return {"error": f"the {fmt} size did not take on a new timeline: nothing built, {name!r} untouched",
-                    "settings": custom}
+        staged, custom, err = stage(name, tlbin, prev_name)
+        if err:
+            return err
     archived = None
     if old and args.get("replace") == "delete":
         mp.DeleteTimelines(old)
@@ -544,7 +716,8 @@ def _cli():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--project", required=True)
     ap.add_argument("--cuts", help="cut list (needed for build / review_markers / inspect)")
-    ap.add_argument("--mode", default="build", choices=["import", "multicam", "build", "review_markers", "inspect", "read_cuts"])
+    ap.add_argument("--mode", default="build", choices=["import", "multicam", "build", "takes", "read_takes",
+                                                         "review_markers", "inspect", "read_cuts"])
     ap.add_argument("--name", help="timeline name (default: the cut list's)")
     ap.add_argument("--format", choices=["9x16", "16x9", "4x3"],
                     help="timeline format: token in the name + own resolution when the project's makes another format "
@@ -556,7 +729,7 @@ def _cli():
                          "name, the new build takes the plain name (inspect first)")
     ap.add_argument("--state", help="snippet, build: keyword and archive label of this build (default rough / tight)")
     ap.add_argument("--json", help="dry run: write the full plan here")
-    ap.add_argument("--out", help="snippet, read_cuts: where Resolve writes the read-back Cut list")
+    ap.add_argument("--out", help="snippet, read_cuts / read_takes: where Resolve writes the read-back Cut list / picks")
     ap.add_argument("--camera-tracks", action="store_true",
                     help="snippet, build: keep face / camera clips on V2 / V3 instead of multicam angle switches on V1")
     a = ap.parse_args()
@@ -578,6 +751,23 @@ def _cli():
     if not a.cuts:
         ap.error("--cuts is required for this mode")
     cut = E.read_json(a.cuts)
+    if a.mode in ("takes", "read_takes"):
+        import resolve_bins as B
+        name = a.name or cut.get("timeline")
+        pp = picker_plan(P, cut)
+        print(f"take picker {picker_name(B.with_format(name, a.format) if a.format else name)!r}: {len(pp)} clips, "
+              f"{sum(len(g['options']) for g in pp)} takes, {sum(g['len_f'] for g in pp) / P.fps:.1f} s (dry run)")
+        for g in pp:
+            o = g["options"]
+            print(f"  {g['seg'] + 1:>3}. {g['len_f']:>5} fr  {len(o):>2} takes  default {o[0]['src']} {o[0]['cam']}  "
+                  f"…{g['first'][:40]}  | " + ", ".join(f"{x['src']} {x['cam']} {x['startFrame']}" for x in o[1:4])
+                  + (" …" if len(o) > 4 else ""))
+        missing = sorted({x["file"] for g in pp for x in g["options"] if not os.path.isfile(x["file"])})
+        if missing:
+            print("MISSING files:\n  " + "\n  ".join(missing))
+        if a.json:
+            E.write_json(a.json, {"picker": pp})
+        return
     pl = plan(P, cut, lambda sid: bool(mc_name(P, sid)))
     marks = review_plan(cut) if pl["tight"] else []
     name = a.name or cut.get("timeline")
