@@ -145,7 +145,7 @@ def read_drt(path):
     for n, s in files.items():
         if not n.startswith("SeqContainer/"):
             continue
-        root = ET.fromstring(s)
+        root = ET.fromstring(re.sub(r"<(/?)(\w+)::(\w+)", r"<\1\2__\3", s))  # `<ListMgt::LmVersionTable>` is not XML
         video, sid = [], None
         for tr in root.findall("VideoTrackVec/Element/Sm2TiTrack"):
             sid = sid or _txt(tr, "Sequence")

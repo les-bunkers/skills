@@ -1,6 +1,6 @@
 ---
 name: resolve
-description: Drive DaVinci Resolve Studio from an agent through Blackmagic's DaVinci Resolve MCP — the rules every call follows (timeouts that don't stop scripts, sandbox vs unsafe, one Resolve shared with the human and other sessions, save and restore state, check every return value) and the log of what failed before (imports, moves that copy, appends, subtitles, markers, multicam angles, take selector, audio edits, renders, frame grabs, LUTs, Fusion, restarts, hangs), plus the one media-pool layout every project follows: which bin a timeline, a camera file or an asset goes in, how timelines and versions are named (the format in the name: the long 9x16 cut first, the 16x9 and the shorts made from it), the snapshot made before a big edit, keywords and smart bins. Use before any Resolve MCP call (run_script, run_script_unsafe, get_image, get_thumbnails, describe_grade), when a Resolve script silently does nothing, returns False/None/[] or times out, when Resolve hangs, won't launch or the MCP says it is not running, when creating a bin, naming or versioning a timeline, setting up a 9:16 or 16:9 timeline, filing or tagging clips or tidying a project's media pool, or when running /videos:resolve.
+description: Drive DaVinci Resolve Studio from an agent through Blackmagic's DaVinci Resolve MCP — the rules every call follows (timeouts that don't stop scripts, sandbox vs unsafe, one Resolve shared with the human and other sessions, save and restore state, check every return value) and the log of what failed before (imports, moves that copy, appends, subtitles, markers, multicam angles, take selector, audio edits, renders, frame grabs, LUTs, Fusion, restarts, hangs), plus the one media-pool layout every project follows: which bin a timeline, a camera file or an asset goes in, how timelines and versions are named (the format in the name: the long 9x16 cut first, the 16x9 and the shorts made from it), the snapshot made before a big edit, the status bins (WIP/Processing while an agent changes a timeline, Waiting for review for the human's sign-off, Published for approved cuts), keywords and smart bins. Use before any Resolve MCP call (run_script, run_script_unsafe, get_image, get_thumbnails, describe_grade), when a Resolve script silently does nothing, returns False/None/[] or times out, when Resolve hangs, won't launch or the MCP says it is not running, when creating a bin, naming or versioning a timeline, handing a timeline to the human for review or taking it back, setting up a 9:16 or 16:9 timeline, filing or tagging clips or tidying a project's media pool, or when running /videos:resolve.
 ---
 
 The stages that touch Resolve (ingest, rough, tighten, audio, grade, formats, master, wide, clips) follow these rules. The full log of what works and what failed, by area: [resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md). Read the section for the area you are about to touch before writing the script.
@@ -48,7 +48,8 @@ One Resolve serves every agent session and the human: one project, current timel
 - Nothing changes while a render runs (imports return `[]`, markers return False).
 - Nothing changes while the human is active in Resolve either, throwaway test timelines included: a timeline a script creates or duplicates becomes what they see, and changes made beside theirs have come back undone a minute later without an error. The log tells (`Application state changed to Active` with no later `Inactive`, page changes or saves between your calls). After a change, read the state back in a later call before reporting it done.
 - Never `DeleteAllRenderJobs`; delete only your own job ids after `Complete`. After a render, `OpenPage("edit")`: on Deliver, track toggles return True and change nothing.
-- Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. A big change starts with a snapshot of the timeline into the archive (below); delete only your own tests, and replace a build only after comparing the timeline with the last cut list (hand edits → ask).
+- Add new tracks disabled (or enabled alone, on request) and leave the human's toggles as found. A change to a working timeline starts with `B.claim` (snapshot into the archive, timeline into `WIP/Processing`) and ends with `B.release` (below); delete only your own tests, and replace a build only after comparing the timeline with the last cut list (hand edits → ask).
+- A timeline in `WIP/Processing` is another session's work in progress: read it, don't change it.
 - `DuplicateTimeline` and `ImportTimelineFromFile` make the new timeline current: restore the previous one.
 - Files on a timeline are held open: re-render to a new path, then `ReplaceClip`.
 - See Resolve's state through the API, `get_image` / `get_thumbnails`, or a capture of the Resolve window alone; never a desktop screenshot.
@@ -58,20 +59,25 @@ One Resolve serves every agent session and the human: one project, current timel
 One layout in every project; full rules and who files what: the log's section Organization. The helper is `${CLAUDE_PLUGIN_ROOT}/scripts/resolve_bins.py` (`import resolve_bins as B` after `sys.path.insert`, then `importlib.reload(B)`).
 
 ```
-01 Timelines/WIP/Latest     working timelines = the video + its format: "Teleprompter demo 9x16", "Teleprompter demo 16x9"
-                            shorts from the long vertical: "Teleprompter demo 9x16 S01 price objection"
-01 Timelines/WIP/Archive    earlier versions: "Teleprompter demo 9x16 v02 2026-03-04 rough"
-01 Timelines/Final          approved cuts: "… 9x16 v05 2026-03-09 approved"      01 Timelines/Scratch = tests
+01 Timelines/WIP/Latest          working timelines nobody is changing = the video + its format: "Teleprompter demo 9x16",
+                                 "Teleprompter demo 16x9"; shorts: "Teleprompter demo 9x16 S01 price objection"
+01 Timelines/WIP/Processing      working timelines an agent is changing right now (same names)
+01 Timelines/WIP/Archive         earlier versions: "Teleprompter demo 9x16 v02 2026-03-04 rough"
+01 Timelines/Waiting for review  working timelines an agent finished, waiting for the human's sign-off (same names)
+01 Timelines/Published           approved cuts: "… 9x16 v05 2026-03-09 approved"      01 Timelines/Scratch = tests
 02 Footage/<YYYY-MM-DD place or subject>/<take>/   camera and audio files as shot; <shoot>/Multicam
 03 Assets/Images · Videos/<Video>/<fmt> · Music · SFX · Voice/<Video> · Subtitles/<Video>
+04 Exports/<Video>/              final files, checked and approved: the 9x16, the 16x9, the shorts (B.file_export)
 ```
 
 - Formats: the long `<Video> 9x16` (1080×1920) is cut first and approved; `<Video> 16x9` and the shorts are made from the approved one, never cut on their own. The format token always matches the timeline's resolution. Names: `B.tl_name(video, fmt, short, label)`, read back with `B.parse(name)`; an old working timeline without a token → `B.add_format(project, name)`.
-- Before a big edit (rebuild, restructure, a pass over the whole timeline): `result = B.snapshot(resolve, project, "<Video> <fmt>", "<state>")`. A copy goes to the archive as `<Video> <fmt> vNN YYYY-MM-DD <state>`; the working timeline keeps its name and its place. Never put a version, date or stage in a working timeline's name, never delete or edit an archived one.
+- The bin of a working timeline is its status; its name never changes with it. Start of an agent pass: `result = B.claim(resolve, project, "<Video> <fmt>", "<state>")`: a copy goes to the archive as `<Video> <fmt> vNN YYYY-MM-DD <state>`, then the working timeline itself moves to `WIP/Processing` (`snapshot_first=False` for one marker or one cut). End of the pass: `B.release(resolve, project, "<Video> <fmt>")` → `Waiting for review` when the human must sign off (the stage's status turns `review`), `review=False` → back to `WIP/Latest`. Builds land in Processing: check, then release. Human approved → `B.release(…, review=False)`; changes asked → `B.claim` again. `claim` refuses a timeline already in Processing: find out whose it is before `take_over=True`.
+- Never put a version, date or stage in a working timeline's name, never delete or edit an archived or published one. Projects that still have `01 Timelines/Final`: `B.FINAL` now means `Published`; `B.audit` lists what to move over (`old_final_bin`).
 - Camera and audio clips keep their file name as clip name. The camera goes in the `Angle` metadata. Never rename a pool clip for good.
+- A final file that passed its check and the human's approval: `B.file_export(resolve, project, path, "<Video> <fmt>")` → `04 Exports/<Video>` (a re-render of the same timeline replaces the item's file in place).
 - New bins come from `B.path_bin(mp, "03 Assets/Videos/<Video>")`, never at the pool root. Moves go through `B.move(resolve, project, items, path)`: a plain `MoveClips` can copy instead of moving while returning True.
 - Tag what you add: `B.tag(item, "<Video>", "<kind>")` (kinds in the log); a timeline also gets `B.timeline_words(name)` (video, format, `short`). Resolve shows one smart bin per keyword, so the video's name lists everything that belongs to it and `9x16` every vertical timeline.
-- After a stage that added things: `result = B.audit(project)` → `ok` True.
+- After a stage that added things: `result = B.audit(project)` → `ok` True (`in_processing` empty of your own timelines).
 
 ## Verify
 
@@ -86,7 +92,7 @@ One layout in every project; full rules and who files what: the log's section Or
 | `Script timed out` / a call runs for minutes | Running scripts |
 | Import returns `[]`, marker or toggle does nothing, wrong project or timeline | One Resolve, many callers; Media pool; Tracks |
 | A move doubled the clips or timelines, a bin exists twice, a rename returned False | Media pool |
-| Where does this go, what do I call it, how do I keep the old version | Organization |
+| Where does this go, what do I call it, how do I keep the old version, which bin while I work or wait for review | Organization |
 | A 9x16 timeline, framing a vertical, the 16x9 or a short from the approved 9x16 | Organization § Formats; Timelines § Another format |
 | A vertical render came out landscape | Rendering |
 | Append places nothing, subtitles at the end, 1-frame-short items | Timelines; Subtitles |

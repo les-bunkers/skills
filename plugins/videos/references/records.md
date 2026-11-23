@@ -35,7 +35,7 @@ talent: Host name
 style: docs/edit_style.md     # taste files the stages read, space-separated paths
 code: footage/2026-03-02/rough-cut
 media: /mnt/media/acme/videos/launch-03-studio-tour
-resolve: Acme project / Studio tour 9x16  # project / working timeline (the video's name + format, in 01 Timelines/WIP/Latest)
+resolve: Acme project / Studio tour 9x16  # project / working timeline (the video's name + format; its bin = its status: WIP/Latest, WIP/Processing, Waiting for review)
 brief: done 2026-03-02        # one key per stage: status word + date or note
 generate: …  ingest: …  transcribe: …  rough: …  tighten: …  audio: …  grade: …  formats: …  master: …  wide: …  clips: …  qc: …  publish: …
 next: editor reviews the tighten markers (pink first)

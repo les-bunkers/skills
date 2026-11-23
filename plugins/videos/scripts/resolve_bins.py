@@ -3,44 +3,58 @@ and human. Runs inside Resolve through Blackmagic's Resolve MCP (`run_script_uns
 
     import sys, importlib; sys.path.insert(0, r"<plugin>/scripts")
     import resolve_bins as B; importlib.reload(B)              # reload: Resolve keeps modules between calls
-    result = B.snapshot(resolve, project, "Teleprompter demo", "rough")    # before a big edit
-    result = B.audit(project)                                              # what breaks the layout
+    result = B.claim(resolve, project, "Teleprompter demo 9x16", "rough")   # an agent starts changing it
+    result = B.release(resolve, project, "Teleprompter demo 9x16")          # done, the human signs off
+    result = B.audit(project)                                               # what breaks the layout
 
 Layout (paths from the media-pool root; the numbers keep the order in every sort mode):
-  01 Timelines/WIP/Latest    working timelines, name = the video + its format ("Teleprompter demo 9x16",
-                             "Teleprompter demo 16x9"); a short cut from the long vertical = "<Video> 9x16 S01 <topic>";
-                             a variant waiting for a choice = "<Video> 9x16 - <variant>". tl_name() builds these.
+  01 Timelines/WIP/Latest    working timelines nobody is changing right now, name = the video + its format
+                             ("Teleprompter demo 9x16", "Teleprompter demo 16x9"); a short cut from the long vertical =
+                             "<Video> 9x16 S01 <topic>"; a variant waiting for a choice = "<Video> 9x16 - <variant>".
+                             tl_name() builds these.
+  01 Timelines/WIP/Processing  the working timelines an agent is changing right now: hands off (claim()).
   01 Timelines/WIP/Archive   history: "<working name> vNN YYYY-MM-DD <state>" ("Teleprompter demo 9x16 v02 2026-03-04
                              rough"). NN counts up per working timeline and is never reused.
-  01 Timelines/Final         approved cuts, same name pattern with state "approved" (made on the first approval).
+  01 Timelines/Waiting for review  working timelines an agent finished and the human must sign off (release()).
+  01 Timelines/Published     approved cuts, same name pattern with state "approved" (older projects: "Final").
   01 Timelines/Scratch       tests and throwaways.
   02 Footage/<YYYY-MM-DD place or subject>/[<concept>/]<take or source>/    camera and audio files as shot
   02 Footage/<shoot>/Multicam                                               that shoot's multicam clips
   03 Assets/Images · Videos/<Video>[/<set>] · Music · SFX · Voice/<Video> · Subtitles/<Video>
                              made or bought material; Voice = cleaned, mastered or generated voice tracks.
+  04 Exports/<Video>         the final rendered files of one video, checked and approved: its 9x16, its 16x9, its
+                             shorts (file_export()). One item per deliverable; a re-render replaces the file in place.
 
 Rules:
   - Camera and audio clips keep their FILE name as clip name. The camera goes in the clip's `Angle` metadata.
-  - Before a big edit: snapshot(). The copy goes to the archive under a versioned name; the working timeline keeps its
-    name and its place, so every pointer to it (records, scripts, the human's habit) stays right.
+  - The bin of a working timeline is its status: Latest (idle), Processing (an agent is changing it), Waiting for
+    review (an agent finished, the human signs off). Its name never changes with the status.
+  - An agent starts changing a working timeline: claim() = snapshot() into the archive, then the timeline itself moves
+    to Processing. Done: release() moves it to Waiting for review (or back to Latest when no sign-off is needed).
+  - snapshot(): the COPY goes to the archive under a versioned name; the working timeline keeps its name and stays the
+    same timeline, so every pointer to it (records, scripts, render jobs, the human's open tab) stays right.
   - Keywords on every item (Resolve shows one smart bin per keyword): the video name, the shoot, the kind (timeline /
     latest / archive / rough / tight / camera / audio track / multicam / graphic / voice / subtitle …); timelines also
     carry their format (9x16 / 16x9 / 4x3) and shorts "short".
   - The format in a timeline's name matches its resolution (audit checks it). A video is cut as the long 9x16 first;
     the 16x9 and the shorts are made from the approved 9x16 (references/resolve.md § Organization).
-  - Nothing at the pool root, no other top-level bin, no "/" in a bin name.
+  - Nothing at the pool root, no top-level bin besides the four numbered ones, no "/" in a bin name.
   - Moves go through move(): `MoveClips` / `MoveFolders` COPY when Resolve's window believes Alt is down.
 """
 import os
 import re
 import time
 
-TIMELINES, FOOTAGE, ASSETS = "01 Timelines", "02 Footage", "03 Assets"
-LATEST, ARCHIVE = TIMELINES + "/WIP/Latest", TIMELINES + "/WIP/Archive"
-FINAL, SCRATCH = TIMELINES + "/Final", TIMELINES + "/Scratch"
+TIMELINES, FOOTAGE, ASSETS, EXPORTS = "01 Timelines", "02 Footage", "03 Assets", "04 Exports"
+LATEST, PROCESSING, ARCHIVE = TIMELINES + "/WIP/Latest", TIMELINES + "/WIP/Processing", TIMELINES + "/WIP/Archive"
+REVIEW, PUBLISHED, SCRATCH = TIMELINES + "/Waiting for review", TIMELINES + "/Published", TIMELINES + "/Scratch"
+FINAL = PUBLISHED                    # the approved-cuts bin was called "Final" before; to=B.FINAL now files in Published
+OLD_FINAL = TIMELINES + "/Final"     # still read (versions, audit) in projects that have it; audit asks to empty it
+WORKING = {"latest": LATEST, "processing": PROCESSING, "review": REVIEW}  # status -> bin; working names only
 ASSET_KINDS = ("Images", "Videos", "Music", "SFX", "Voice", "Subtitles")
 VERSION = re.compile(r"^(?P<video>.+) v(?P<n>\d{2,3}) (?P<date>\d{4}-\d{2}-\d{2})(?: (?P<state>.+))?$")
-PLACE_WORDS = ("timeline", "latest", "archive", "final", "scratch")
+# "latest" = the working version of a timeline (whichever status bin holds it), against "archive" / "published" copies
+PLACE_WORDS = ("timeline", "latest", "archive", "published", "final", "scratch")
 STATES = ("rough", "tight", "graded", "mastered", "approved")  # read back from a timeline's keywords; others: pass state
 # Timeline size per format. 9x16 = the long vertical every video is cut as first, and its shorts; 16x9 is made from the
 # approved 9x16 (a 16x9 project's own UHD or HD size is kept); 4x3 only when a platform asks for it.
@@ -295,6 +309,105 @@ def archive(resolve, project, name, state=None, date=None):
             project.SetCurrentTimeline(cur)
 
 
+def where(project, name):
+    """Path of the bin that holds timeline `name` ("01 Timelines/WIP/Latest"), or None."""
+    tl = timeline(project, name)
+    item = tl.GetMediaPoolItem() if tl else None
+    if item is None:
+        return None
+    uid = item.GetUniqueId()
+    return next((path for c, _f, path in walk(project.GetMediaPool().GetRootFolder()) if c.GetUniqueId() == uid), None)
+
+
+def status(project, name):
+    """Status of a working timeline from its bin: "latest", "processing" or "review"; None anywhere else."""
+    path = where(project, name)
+    return next((k for k, v in WORKING.items() if v == path), None)
+
+
+def set_status(resolve, project, name, to):
+    """Move working timeline `name` to the bin of status `to` (latest / processing / review). Same timeline, same
+    name: the record, render jobs and the human's open tab keep pointing at it."""
+    if to not in WORKING:
+        return {"error": f"status must be one of {', '.join(WORKING)} (got {to!r})"}
+    tl = timeline(project, name)
+    if tl is None:
+        return {"error": f"no timeline {name!r}"}
+    if VERSION.match(name):
+        return {"error": f"{name!r} is a frozen version: archived and published copies stay where they are"}
+    was = where(project, name)
+    r = move(resolve, project, [tl.GetMediaPoolItem()], WORKING[to])
+    return {**r, "timeline": name, "status": to, "was": was}
+
+
+def claim(resolve, project, name, state=None, snapshot_first=True, take_over=False):
+    """An agent starts changing working timeline `name`: a snapshot into the archive (snapshot_first=False for one
+    marker or one cut), then the timeline itself moves to WIP/Processing, which tells the human and the other sessions
+    that someone is on it. Already in Processing -> error unless take_over=True (another session holds it, or one
+    stopped mid-edit: find out first)."""
+    if timeline(project, name) is None:
+        return {"error": f"no timeline {name!r}"}
+    if status(project, name) == "processing" and not take_over:
+        return {"error": f"{name!r} is in Processing: another agent is changing it, or one stopped mid-edit",
+                "fix": "check the video's record and the other sessions, ask the human; take_over=True once it is yours"}
+    snap = snapshot(resolve, project, name, state) if snapshot_first else None
+    if snap and "error" in snap:
+        return {"error": "snapshot failed, timeline not claimed", "snapshot": snap}
+    return {**set_status(resolve, project, name, "processing"), "snapshot": snap["snapshot"] if snap else None}
+
+
+def release(resolve, project, name, review=True):
+    """The agent is done with `name`: to Waiting for review when the human must sign off (default), else back to
+    WIP/Latest. After the human's verdict: approved -> release(review=False) (and a snapshot to PUBLISHED where the
+    stage freezes an approval), changes asked -> claim() again."""
+    return set_status(resolve, project, name, "review" if review else "latest")
+
+
+def file_export(resolve, project, path, timeline_name):
+    """A final rendered file (checked, approved) goes in 04 Exports/<Video>, tagged with the video, `export`, its
+    format and `short`. The item's Description holds the timeline it was rendered from: a re-render of that timeline
+    (a new file, since Resolve holds the old one open) replaces the item's file in place, so the bin keeps one item per
+    deliverable. A file already in the pool elsewhere is moved there. Returns {"filed": name, "bin": …} or {"error": …}."""
+    p = parse(timeline_name)
+    if p["version"] or not p["fmt"]:
+        return {"error": f"{timeline_name!r}: pass the working timeline's name (video + format, no version)"}
+    if not os.path.isfile(path):
+        return {"error": f"no file {path!r}"}
+    mp = project.GetMediaPool()
+    target = EXPORTS + "/" + clean(p["video"])
+    cur = mp.GetCurrentFolder()
+    norm = os.path.normcase(os.path.abspath(path))
+    try:
+        b = path_bin(mp, target)
+        same_file = next((c for c, _f, _p in walk(mp.GetRootFolder())
+                          if os.path.normcase(os.path.abspath(c.GetClipProperty("File Path") or "")) == norm), None)
+        prev = next((c for c in b.GetClipList() or [] if c.GetMetadata("Description") == timeline_name), None)
+        if same_file is not None:
+            item, how = same_file, "already in the pool"
+            if same_file.GetUniqueId() not in {c.GetUniqueId() for c in b.GetClipList() or []}:
+                r = move(resolve, project, [same_file], target)
+                if "error" in r:
+                    return r
+                how = "moved"
+        elif prev is not None:
+            if not prev.ReplaceClip(path):
+                return {"error": "ReplaceClip failed", "item": prev.GetName(), "file": path}
+            item, how = prev, "replaced"
+        else:
+            mp.SetCurrentFolder(b)
+            got = mp.ImportMedia([path]) or []
+            if not got:
+                return {"error": "ImportMedia returned nothing (Deliver page or a render running?)", "file": path}
+            item, how = got[0], "imported"
+        item.SetMetadata("Description", timeline_name)  # ReplaceClip resets metadata: set it again every time
+        tag(item, *timeline_words(timeline_name), "export")
+        return {"filed": item.GetName(), "how": how, "bin": target, "from": timeline_name,
+                "description_ok": item.GetMetadata("Description") == timeline_name}
+    finally:
+        if cur:
+            mp.SetCurrentFolder(cur)
+
+
 def add_format(project, name):
     """A working timeline named before formats were named ("Demo", "Demo - panels") gets the format its resolution
     makes ("Demo 16x9", "Demo 16x9 - panels") and the matching keywords. Archived names stay as they are (history).
@@ -369,11 +482,12 @@ def audit(project, sample=10):
     """What breaks the layout, as counts and samples. `ok` True = nothing to fix."""
     mp = project.GetMediaPool()
     root = mp.GetRootFolder()
-    found = {"stray_top_bins": [s.GetName() for s in root.GetSubFolderList() or [] if s.GetName() not in (TIMELINES, FOOTAGE, ASSETS)],
+    found = {"stray_top_bins": [s.GetName() for s in root.GetSubFolderList() or [] if s.GetName() not in (TIMELINES, FOOTAGE, ASSETS, EXPORTS)],
              "items_at_root": [c.GetName() for c in root.GetClipList() or []],
              "bin_names_with_slash": [], "timelines_outside_01": [], "versioned_name_in_latest": [],
              "archive_name_off_pattern": [], "latest_without_format": [], "format_not_resolution": [],
-             "footage_clip_renamed": [], "without_keywords": []}
+             "in_processing": [], "old_final_bin": [], "footage_clip_renamed": [], "without_keywords": []}
+    working = tuple(WORKING.values())
     tls = {}
     for i in range(1, project.GetTimelineCount() + 1):
         t = project.GetTimelineByIndex(i)
@@ -391,14 +505,18 @@ def audit(project, sample=10):
         n += 1
         kind, name = c.GetClipProperty("Type"), c.GetName()
         if kind == "Timeline":
+            if path == OLD_FINAL:
+                found["old_final_bin"].append(name)  # fix: move(resolve, project, items, PUBLISHED), then delete the bin
             if not path.startswith(TIMELINES):
                 found["timelines_outside_01"].append(f"{path}/{name}")
-            elif path == LATEST and VERSION.match(name):
-                found["versioned_name_in_latest"].append(name)
-            elif path in (ARCHIVE, FINAL) and not VERSION.match(name):
+            elif path in working and VERSION.match(name):
+                found["versioned_name_in_latest"].append(f"{path}/{name}")
+            elif path in (ARCHIVE, PUBLISHED, OLD_FINAL) and not VERSION.match(name):
                 found["archive_name_off_pattern"].append(name)
-            elif path == LATEST and not parse(name)["fmt"]:
+            elif path in working and not parse(name)["fmt"]:
                 found["latest_without_format"].append(name)  # fix: add_format(project, name)
+            if path == PROCESSING:
+                found["in_processing"].append(name)  # yours -> release(); another session's -> leave it, say so
             fmt, tl = parse(name)["fmt"], tls.get(name)
             if fmt and tl is not None and fmt_of(tl, project) not in (None, fmt):
                 found["format_not_resolution"].append(f"{name} (resolution makes {fmt_of(tl, project)})")

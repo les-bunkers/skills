@@ -2,20 +2,22 @@
 from a shell it only prints the snippet (rendering is the human's call: run it once the timeline is approved).
 
 Per timeline: Edit page, check the audio tracks (only the track whose name starts with ARGS audio_track enabled, when
-given), load a STOCK preset by timeline size ("YouTube - 2160p" when the long side is >= 3840, else "YouTube - 1080p"),
-then set only TargetDir / CustomName, plus the frame size on a vertical (9x16) timeline, since the stock presets are
-landscape. A job whose size differs from its timeline's is deleted, never rendered. Why stock first: after audio-only
-renders a hand-built H.264 job rendered audio only while the job list claimed video. The stock YouTube presets give
-H.264, ~11 Mbps at 4K, a keyframe every 24 frames. Name the timelines by format ("Studio tour 9x16", "Studio tour 16x9",
+given), load the MASTER preset for its size (resolve_presets.py builds it once per Resolve from a stock preset:
+3840x2160 16:9 -> "videos master 4K HEVC 80M" = H.265 NVIDIA Main10 VBR 80 Mbps; every other size, 9x16 and shorts
+included -> "videos master H264 20M" = H.264 NVIDIA VBR 20 Mbps; AAC 320k), then set only TargetDir / CustomName,
+plus the frame size on a vertical (9x16) timeline. A job whose size differs from its timeline's is deleted, never
+rendered. Why a preset and not settings: the API ignores VideoQuality (the stock presets render ~11 Mbps at 4K), and
+after audio-only renders a hand-built job rendered audio only while the job list claimed video. No NVIDIA encoder ->
+the stock "YouTube - 2160p" / "YouTube - 1080p" preset, and the job's report says "preset_fallback". Name the timelines by format ("Studio tour 9x16", "Studio tour 16x9",
 shorts "Studio tour 9x16 S01 …"): prefix "Studio tour 9x16 S" renders every short of the video.
 Output name = slug of the timeline name (lowercase letters, digits, hyphens) + ARGS suffix.
 ARGS: {"timelines": [names] | "prefix": "...", "target_dir": "...", "audio_track": "MASTER" (optional),
-       "suffix": "-master", "start": true}
+       "suffix": "-master", "start": true, "scripts_dir": "<this folder>", "preset_wide" / "preset": a preset name
+       to use instead of the masters}
 result: jobs queued (format, size, fps, codecs per job), started or not. Poll GetRenderJobStatus = Complete before
 reading a file (ffprobe sees a duration while Resolve still writes). Then finals_check.py on every file.
 usage: python render_finals.py --timeline "Studio tour" --target-dir <masters dir> [--audio-track MASTER] --snippet
 """
-import json
 import re
 import sys
 import time
@@ -29,7 +31,12 @@ def slug(name):
 
 
 def run_in_resolve(resolve, args):
+    import importlib
+    sys.path.insert(0, args["scripts_dir"])
+    import resolve_presets as RP
+    importlib.reload(RP)  # Resolve keeps modules between calls
     p = resolve.GetProjectManager().GetCurrentProject()
+    made = {}
     out = args["target_dir"]
     Path(out).mkdir(parents=True, exist_ok=True)
     want = set(args.get("timelines") or [])
@@ -52,8 +59,18 @@ def run_in_resolve(resolve, args):
                 continue
         w = int(float(t.GetSetting("timelineResolutionWidth") or 0))
         h = int(float(t.GetSetting("timelineResolutionHeight") or 0))
-        wide = max(w, h) >= 3840
-        p.LoadRenderPreset(args.get("preset_wide", "YouTube - 2160p") if wide else args.get("preset", "YouTube - 1080p"))
+        kind = RP.kind_for(w, h)
+        preset, fallback = args.get("preset_wide" if kind == "uhd" else "preset"), None
+        if not preset:
+            if kind not in made:
+                made[kind] = RP.ensure(resolve, p, kind)
+            preset = made[kind].get("preset")
+            if not preset:
+                fallback = made[kind].get("error")
+                preset = "YouTube - 2160p" if kind == "uhd" else "YouTube - 1080p"
+        if not p.LoadRenderPreset(preset):
+            report.append({"timeline": name, "skipped": f"render preset {preset!r} did not load"})
+            continue
         fname = slug(name) + args.get("suffix", "")
         s = {"SelectAllFrames": True, "TargetDir": out, "CustomName": fname, "ExportSubtitle": False}
         if h > w:  # vertical (9x16) timeline: the stock YouTube presets are landscape, so the size follows the timeline
@@ -68,7 +85,8 @@ def run_in_resolve(resolve, args):
                            "settings_ok": ok})
             continue
         jobs.append(jid)
-        report.append({"timeline": name, "file": f"{out}/{fname}.mp4", "settings_ok": ok,
+        report.append({"timeline": name, "file": f"{out}/{fname}.mp4", "settings_ok": ok, "preset": preset,
+                       **({"preset_fallback": fallback} if fallback else {}),
                        "job": {k: j.get(k) for k in ("FormatWidth", "FormatHeight", "FrameRate", "VideoCodec", "AudioCodec",
                                                      "AudioSampleRate", "IsExportVideo", "IsExportAudio")}})
     started = False
@@ -78,7 +96,7 @@ def run_in_resolve(resolve, args):
                 started = True
                 break
             time.sleep(1)
-    return {"started": started, "jobs": report, "job_ids": jobs}
+    return {"started": started, "jobs": report, "job_ids": jobs, "presets_made": made}
 
 
 def _cli():
@@ -94,9 +112,10 @@ def _cli():
     ap.add_argument("--snippet", action="store_true", help="print the run_script_unsafe code (default)")
     a = ap.parse_args()
     args = {"timelines": a.timeline, "prefix": a.prefix, "target_dir": str(Path(a.target_dir).resolve()),
-            "audio_track": a.audio_track, "suffix": a.suffix, "start": True}
+            "audio_track": a.audio_track, "suffix": a.suffix, "start": True,
+            "scripts_dir": str(Path(__file__).resolve().parent)}
     me = str(Path(__file__).resolve())
-    print(f"g = dict(globals()); g['ARGS'] = {json.dumps(args, ensure_ascii=False)}\n"
+    print(f"g = dict(globals()); g['ARGS'] = {args!r}\n"  # a Python literal: JSON's null / true break the exec
           f"exec(open({me!r}, encoding='utf-8').read(), g); result = g['result']")
 
 

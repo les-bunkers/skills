@@ -62,15 +62,17 @@ Etiquette that follows: one agent changes Resolve at a time, the others read; ev
 
 ## Organization: where things go, what they are called
 
-One layout for every stage, every agent session and the human. `scripts/resolve_bins.py` holds it as code (`path_bin`, `move`, `snapshot`, `archive`, `multicam`, `tag`, `audit`); `resolve_build.py` and the audio cleanup file their output with it. A project the human organized another way on purpose keeps their layout: follow it and say so in the record.
+One layout for every stage, every agent session and the human. `scripts/resolve_bins.py` holds it as code (`path_bin`, `move`, `snapshot`, `archive`, `claim`, `release`, `status`, `multicam`, `tag`, `audit`); `resolve_build.py` and the audio cleanup file their output with it. A project the human organized another way on purpose keeps their layout: follow it and say so in the record.
 
 ```
 01 Timelines/
-  WIP/Latest/      working timelines: the video + its format       "Teleprompter demo 9x16"   "Teleprompter demo 16x9"
-                   shorts cut from the long vertical               "Teleprompter demo 9x16 S01 price objection"
-  WIP/Archive/     earlier versions                                 "Teleprompter demo 9x16 v02 2026-03-04 rough"
-  Final/           approved cuts                                    "Teleprompter demo 9x16 v05 2026-03-09 approved"
-  Scratch/         tests and throwaways
+  WIP/Latest/          working timelines nobody is changing now     "Teleprompter demo 9x16"   "Teleprompter demo 16x9"
+                       shorts cut from the long vertical            "Teleprompter demo 9x16 S01 price objection"
+  WIP/Processing/      working timelines an agent is changing now   (same names: hands off until it leaves)
+  WIP/Archive/         earlier versions                             "Teleprompter demo 9x16 v02 2026-03-04 rough"
+  Waiting for review/  an agent finished, the human signs off       (same names)
+  Published/           approved cuts                                "Teleprompter demo 9x16 v05 2026-03-09 approved"
+  Scratch/             tests and throwaways
 02 Footage/
   2026-03-02 Studio/           one folder per shoot: "<YYYY-MM-DD> <place or subject>"
     <take or source id>/       camera files as shot; extra microphone files in its sub-bin "Audio"
@@ -80,21 +82,49 @@ One layout for every stage, every agent session and the human. `scripts/resolve_
   Videos/<Video>/[<set>/]      graphics, overlays, B-roll and screen recordings made for one video
   Voice/<Video>/               cleaned, mastered or generated voice tracks
   Subtitles/<Video>/           SRT items
+04 Exports/
+  <Video>/                     the final rendered files, checked and approved: "<slug>-master.mp4" (9x16),
+                               "<slug>-16x9.mp4", the shorts. One item per deliverable (B.file_export)
 ```
 
-The numbers keep the three bins in this order in every sort mode. Nothing sits at the pool root, there is no fourth top-level bin and no "/" in a bin name (`B.clean`).
+The numbers keep the four bins in this order in every sort mode. Nothing sits at the pool root, there is no fifth top-level bin and no "/" in a bin name (`B.clean`); `B.audit` lists strays (`stray_top_bins`), such as the `Audio cleanup — <job>` bins audio-cleanup ≤ 0.2.1 made (move their items to `03 Assets/Voice/<Video>`, then delete the empty bin).
+
+- `B.file_export(resolve, project, path, "<Video> <fmt>[ S01 <topic>]")` after a final file passed its check and the human approved it: imports it into `04 Exports/<Video>` (or moves it there when the pool already has it), Description = the timeline it was rendered from, keywords video, format, `short`, `export`. A re-render of the same timeline (a new file: Resolve holds the old one open) replaces the item's file in place (`ReplaceClip`), so the bin keeps one item per deliverable. Projects set up before `Published` existed have `01 Timelines/Final`: `B.FINAL` now points to `Published`, and `B.audit` lists what is left in `Final` (`old_final_bin`) → `B.move` it to `B.PUBLISHED`, then delete the empty bin, when the human is away.
+
+**Status: the bin says who has the timeline**
+
+A working timeline (plain name, no version) sits in one of three bins, and the bin is its status. The name never changes with it, and it stays the same timeline object, so the record's `resolve:`, render jobs and the human's open tab keep pointing at it.
+
+| Bin | Status | Who moves it there |
+|---|---|---|
+| `WIP/Latest` | nobody is changing it; the human may edit by hand | `B.release(…, review=False)`: work that needs no sign-off, or after the human approved |
+| `WIP/Processing` | an agent is changing it now: the human and the other sessions keep their hands off | `B.claim(…)` when an agent starts; builds land here |
+| `Waiting for review` | the agent is done and wants the human's sign-off | `B.release(…)` when the stage's status turns `review` |
+
+```python
+result = B.claim(resolve, project, "Teleprompter demo 9x16", "before grade")   # snapshot to the archive, then → Processing
+...  # the change
+result = B.release(resolve, project, "Teleprompter demo 9x16")                 # → Waiting for review (review=False → Latest)
+```
+
+- `B.claim` = `B.snapshot` (the copy goes to the archive under its version name) + the timeline itself moves to `WIP/Processing`. One marker or one cut: `snapshot_first=False`. Already in Processing → error: another session holds it, or one stopped mid-edit. Check the video's record and the other sessions, ask the human, and only then `take_over=True`.
+- The archive takes the COPY and the working timeline moves. Renaming the original into the archive and working on a duplicate gives the same bins, but the human's open tab and any queued render then point at the archived copy, and a duplicate can come out different from its source.
+- `B.release` at the end of every agent pass, with the stage's `review` status (`videos.py set … "review …"`). The human's verdict arrives: approved → `B.release(…, review=False)` back to Latest, plus a snapshot to `B.PUBLISHED` where the stage freezes an approval (master, wide, clips); changes asked → `B.claim` again.
+- A builder (`resolve_build.py`, the take picker) files its new timeline in `WIP/Processing`: the agent still checks it (counts, thumbnails, framing), then releases it.
+- The human moves timelines between these bins by hand too, and their move wins: a timeline they pulled out of Waiting for review is theirs until they hand it back.
+- `B.status(project, name)` → `latest` / `processing` / `review` (None outside the three), `B.where(project, name)` → its bin path. `B.audit` lists what sits in Processing (`in_processing`): yours → release it before reporting the stage; another session's → leave it and say so.
 
 **Timeline names**
 
-- In Latest a timeline carries the video's plain name, the one the human says out loud, followed by its format: `<Video> 9x16`, `<Video> 16x9`, `<Video> 4x3`. No date, version, stage or "final" in it: the name never changes while the cut does, so the record, scripts and the human's open tab keep pointing at the right thing. The format token is part of the name because the two cuts of one video live side by side and Resolve refuses two timelines with one name; it always matches the timeline's resolution (`B.audit` checks).
+- In the working bins (Latest, Processing, Waiting for review) a timeline carries the video's plain name, the one the human says out loud, followed by its format: `<Video> 9x16`, `<Video> 16x9`, `<Video> 4x3`. No date, version, stage or "final" in it: the name never changes while the cut does, so the record, scripts and the human's open tab keep pointing at the right thing. The format token is part of the name because the two cuts of one video live side by side and Resolve refuses two timelines with one name; it always matches the timeline's resolution (`B.audit` checks).
 - A short cut from the long vertical: `<Video> 9x16 S<NN> <topic>` ("Teleprompter demo 9x16 S01 price objection"). NN counts up per video, two digits, never reused; the topic is two to four words the human would use. Sorted by name, the shorts sit right under the long 9x16 they come from.
-- Two variants waiting for the human's choice: `<Video> <fmt> - <variant>` ("Teleprompter demo 9x16 - split panels"), both in Latest until they pick one.
-- A frozen version: `<working name> vNN YYYY-MM-DD <state>` ("Teleprompter demo 9x16 v03 2026-03-04 tight"). NN is a whole number on two digits that counts up per working timeline across Archive and Final and is never reused (versions archived before the name carried a format count too). The date is the day it was frozen. The state is one or two words: `rough`, `tight`, `graded`, `mastered`, `approved` (those five are read back from the timeline's keywords when no state is passed), or what the edit is about to change (`before captions`).
+- Two variants waiting for the human's choice: `<Video> <fmt> - <variant>` ("Teleprompter demo 9x16 - split panels"), both in Waiting for review until they pick one.
+- A frozen version: `<working name> vNN YYYY-MM-DD <state>` ("Teleprompter demo 9x16 v03 2026-03-04 tight"). NN is a whole number on two digits that counts up per working timeline across Archive and Published (and an older project's Final) and is never reused (versions archived before the name carried a format count too). The date is the day it was frozen. The state is one or two words: `rough`, `tight`, `graded`, `mastered`, `approved` (those five are read back from the timeline's keywords when no state is passed), or what the edit is about to change (`before captions`).
 - `B.tl_name(video, fmt, short=None, label=None, variant=None)` builds a working name, `B.parse(name)` reads one back (video, fmt, short, label, variant, version, date, state), `B.with_format(name, fmt)` swaps the token. A working timeline named before formats were named ("Teleprompter demo", 16:9): `B.add_format(project, name)` renames it from its resolution ("Teleprompter demo 16x9") and retags it; archived names stay as they are. Then update the record's `resolve:`.
 
 **Formats: the long 9x16 first**
 
-A video is cut once, as the long vertical (`<Video> 9x16`, 1080×1920): rough, tighten, audio, grade, layers, all on that timeline, until the human approves it. The approved 9x16 is frozen in Final, and only then two pieces of work start side by side, both made from it:
+A video is cut once, as the long vertical (`<Video> 9x16`, 1080×1920): rough, tighten, audio, grade, layers, all on that timeline, until the human approves it. The approved 9x16 is frozen in Published, and only then two pieces of work start side by side, both made from it:
 
 - `<Video> 16x9`: the same cut, sound, angles and grade on a 16:9 timeline, the framing and the layers redone for the wide frame (Timelines § Another format from the approved 9x16).
 - The shorts, `<Video> 9x16 S01 …`: each a range of the approved 9x16 with everything on it, plus its own hook and end card.
@@ -103,7 +133,7 @@ The vertical goes first because it is the harder frame: a face and a caption fit
 
 **Before a big edit: snapshot**
 
-A rebuild, a restructure, a re-time, a pass over the whole timeline or anything hard to undo by hand starts with a snapshot. `DuplicateTimeline` makes a copy; the COPY takes the version name and moves to `WIP/Archive`; the current timeline is restored. One marker or one cut needs none.
+A rebuild, a restructure, a re-time, a pass over the whole timeline or anything hard to undo by hand starts with a snapshot (`B.claim` takes one before it moves the timeline to Processing). `DuplicateTimeline` makes a copy; the COPY takes the version name and moves to `WIP/Archive`; the current timeline is restored. One marker or one cut needs none.
 
 ```python
 import sys, importlib; sys.path.insert(0, r"<plugin>/scripts"); import resolve_bins as B; importlib.reload(B)
@@ -111,8 +141,8 @@ result = B.snapshot(resolve, project, "Teleprompter demo 9x16", "rough")   # {"s
 ```
 
 - A rebuild from a cut list (`resolve_build.py` with `replace`) files the timeline it replaces in the archive the same way (`B.archive`): hand edits survive in that copy.
-- An approved cut: `B.snapshot(resolve, project, name, "approved", to=B.FINAL)`, per format and per short. The approved 9x16 is what the 16x9 and the shorts are made from. For a delivered video also export the project (`pm.ExportProject(name, path)`) next to the masters.
-- Nothing in Archive or Final is edited or deleted. Delete only your own tests in Scratch.
+- An approved cut: `B.snapshot(resolve, project, name, "approved", to=B.PUBLISHED)`, per format and per short (`B.FINAL` is the same bin under its older name). The approved 9x16 is what the 16x9 and the shorts are made from. For a delivered video also export the project (`pm.ExportProject(name, path)`) next to the masters.
+- Nothing in Archive or Published is edited or deleted. Delete only your own tests in Scratch.
 
 **Clip names**
 
@@ -121,7 +151,8 @@ result = B.snapshot(resolve, project, "Teleprompter demo 9x16", "rough")   # {"s
 
 **Keywords and smart bins**
 
-- Every item carries keywords (`B.tag(item, …)`): the video's name, the shoot, and its kind. Kinds: `timeline` with `latest` / `archive` / `final` / `scratch`, the state, the format (`9x16` / `16x9` / `4x3`) and `short` for a short (`B.timeline_words(name)` gives video, format and `short` from the name); `camera`, `program`, `audio track`, `multicam`; `graphic`, `photo`, `reference`, `music`, `sfx`, `voice`.
+- ✗ **`B.tag(timeline, …)`** → `TypeError: 'NoneType' object is not callable` (a Timeline has no `GetMetadata`) → tag `timeline.GetMediaPoolItem()`.
+- Every item carries keywords (`B.tag(item, …)`): the video's name, the shoot, and its kind. Kinds: `timeline` with `latest` (the working version, whichever status bin holds it) / `archive` / `published` / `scratch`, the state, the format (`9x16` / `16x9` / `4x3`) and `short` for a short (`B.timeline_words(name)` gives video, format and `short` from the name); `camera`, `program`, `audio track`, `multicam`; `graphic`, `photo`, `reference`, `music`, `sfx`, `voice`; `export` for a final file.
 - Resolve lists one smart bin per keyword under Smart Bins → Keywords in the media pool (User preferences → Editing → Automatic Smart Bins → keywords; the list is hidden → media pool "…" menu → Show Smart Bins). A click on the video's name shows its timelines in every format, its footage and assets across all bins; `latest` shows every working timeline, `9x16` every vertical one, `short` every short.
 - A smart bin matches the keyword exactly as typed: use the words above, same spelling every time, and the video's name exactly as the working timeline carries it before its format token.
 - Smart bins with other rules have no scripting call: the human creates those.
@@ -133,16 +164,18 @@ result = B.snapshot(resolve, project, "Teleprompter demo 9x16", "rough")   # {"s
 | ingest: camera and program files | `02 Footage/<shoot>/<source id>` | file name | shoot, `camera` |
 | ingest: extra microphone files | `…/<source id>/Audio` | file name | shoot, `audio track` |
 | ingest: multicam clip | `02 Footage/<shoot>/Multicam` | `MC <source id>` | shoot, `multicam` |
-| rough, tighten: the build | `01 Timelines/WIP/Latest` | `<Video> 9x16` | video, `timeline`, `latest`, `9x16`, state |
+| rough, tighten: the build | `01 Timelines/WIP/Processing`, then `Waiting for review` | `<Video> 9x16` | video, `timeline`, `latest`, `9x16`, state |
 | rough, tighten: its SRT | `03 Assets/Subtitles/<Video>` | file name | none (refused) |
 | audio: cleaned and mastered tracks (one set serves every format) | `03 Assets/Voice/<Video>` | file name | video, `voice` |
 | layers, B-roll, screen recordings | `03 Assets/Videos/<Video>/<fmt>[/<set>]` (layers are drawn per format) | file name | video, `graphic`, format |
-| master: the approved cut, frozen | `01 Timelines/Final` | `<Video> 9x16 vNN <date> approved` | video, `timeline`, `final`, `9x16`, `approved` |
-| wide: the 16:9 from the approved 9x16 | `01 Timelines/WIP/Latest` | `<Video> 16x9` | video, `timeline`, `latest`, `16x9` |
-| clips: a short from the approved 9x16 | `01 Timelines/WIP/Latest` | `<Video> 9x16 S01 <topic>` | video, `timeline`, `latest`, `9x16`, `short` |
+| any agent pass on a working timeline (grade, audio, layers, framing) | `B.claim` → `WIP/Processing`, then `B.release` → `Waiting for review` | unchanged | unchanged |
+| master: the approved cut, frozen | `01 Timelines/Published` | `<Video> 9x16 vNN <date> approved` | video, `timeline`, `published`, `9x16`, `approved` |
+| wide: the 16:9 from the approved 9x16 | `01 Timelines/WIP/Processing`, then `Waiting for review` | `<Video> 16x9` | video, `timeline`, `latest`, `16x9` |
+| clips: a short from the approved 9x16 | `01 Timelines/WIP/Processing`, then `Waiting for review` | `<Video> 9x16 S01 <topic>` | video, `timeline`, `latest`, `9x16`, `short` |
+| master, wide, clips: the final file, checked and approved | `04 Exports/<Video>` (`B.file_export`) | file name | video, format, `short`, `export` |
 | anything you are only trying | `01 Timelines/Scratch` | free | `scratch` |
 
-`result = B.audit(project)` after a stage that added things: it counts strays at the root, timelines outside `01 Timelines`, version names in Latest, archive names off the pattern, working timelines without a format token (`latest_without_format` → `B.add_format`), names whose format differs from the timeline's resolution (`format_not_resolution`), renamed footage clips and items without keywords. `ok` True = nothing to fix.
+`result = B.audit(project)` after a stage that added things: it counts strays at the root, timelines outside `01 Timelines`, version names in a working bin, archive names off the pattern, working timelines without a format token (`latest_without_format` → `B.add_format`), names whose format differs from the timeline's resolution (`format_not_resolution`), timelines left in Processing (`in_processing`), what is left in an old `Final` bin (`old_final_bin`), renamed footage clips and items without keywords. `ok` True = nothing to fix.
 
 ## Media pool and import
 
@@ -167,15 +200,17 @@ result = B.snapshot(resolve, project, "Teleprompter demo 9x16", "rough")   # {"s
 
 ## Timelines
 
-- `CreateEmptyTimeline(name)` fails on an existing name → the working timeline keeps the video's plain name (Organization): file the old one in the archive under its version name first (`resolve_bins.archive`), or delete it when it is your own test (`mp.DeleteTimelines([t])`). The timeline lands in the current media-pool folder → `mp.SetCurrentFolder(resolve_bins.path_bin(mp, "01 Timelines/WIP/Latest"))` before, restore after.
+- `CreateEmptyTimeline(name)` fails on an existing name → the working timeline keeps the video's plain name (Organization): file the old one in the archive under its version name first (`resolve_bins.archive`), or delete it when it is your own test (`mp.DeleteTimelines([t])`). The timeline lands in the current media-pool folder → `mp.SetCurrentFolder(resolve_bins.path_bin(mp, resolve_bins.PROCESSING))` before (you are still on it), restore after.
 - `ImportTimelineFromFile(drt)` names the timeline after the FILE, lands in the current bin, links existing media and becomes current.
 - Frame rate and resolution: project settings change only while the project has no timelines. Per timeline: on the new empty timeline `SetSetting("useCustomSettings", "1")`, then `timelineFrameRate`, `timelineResolutionWidth` / `Height` (works, e.g. a 1080×1920 timeline in a UHD project).
 - A 9x16 timeline from 16:9 sources: also `SetSetting("timelineInputResMismatchBehavior", "scaleToCrop")` before any clip goes on, so every source fills the frame (centre crop: a 3840×2160 source shows its middle 1215×2160) instead of shrinking into a letterbox; read every setting back. `resolve_build.py --format 9x16` does this on a timeline made under a temporary name and renames it only once the size reads back right; its result `format` says `want` / `got` (the multicam angle switch re-imports the timeline from a .drt: `got` is read after it).
 - Framing a vertical: the centre crop is a start. Per V1 piece, Inspector `Pan` (and `ZoomX` / `ZoomY` for a punch-in) puts the face where the project's framing rule wants it; `TimelineItem.SmartReframe()` tracks the subject inside the already filled frame (Resolve's own doc: set the size and `scaleToCrop` first). Check with `get_thumbnails` across each camera: a face cut by the frame edge or a speaker off the crop on a side camera = framing to fix before review.
+- Inspector transform units on a `scaleToCrop` timeline (calibrated with a marker clip, UHD source on 1080×1920 and 1920×1080 timelines): `b = max(W / SW, H / SH)` is the input scale. `Pan` 1 = `SW·b / Wc` timeline px, `Tilt` 1 = `SH·b / Hc` px, + = up, where `SW·b × SH·b` is the scaled picture on the item's own timeline and `Wc × Hc` the size of the timeline that is CURRENT when `SetProperty` / `GetProperty` runs. Item on the current timeline → `Wc, Hc = W, H` (Pan 3.16 px / Tilt 1.0 px on 9:16 from UHD, 1 px on 1080p from UHD); the formulas below assume that case. ✗ **Values computed for one current timeline, written while another was current** (a UHD 16:9 timeline current while framing the items of a 1080×1920 one: 0.889 px per unit on both axes) → two renders with the faces off the crop → store the px-per-unit a framing plan was computed with in the plan and convert at write time (`k = plan px per unit / (SW·b / Wc)`, same with heights for Tilt), or make the item's timeline current first; then export stills of the framed pieces (`Timeline.ExportFrame`) and measure the face position before rendering. `ZoomX` / `ZoomY` scale about the frame centre and need both set (`ZoomX` alone changed nothing). `CropLeft/Right/Top/Bottom` = timeline px at zoom 1 (= `b` × source px) from each source edge, applied before zoom and pan (the crop box scales with the zoom). To put source rect → screen rect: `s` = screen px per source px, `Zoom = s / b`, `Pan = (ox + s·SW/2 − W/2) / (SW·b/W)`, `Tilt = −(oy + s·SH/2 − H/2) / (SH·b/H)` with `(ox, oy)` the screen position of source pixel (0, 0).
 - `AppendToTimeline([{mediaPoolItem, startFrame, endFrame, recordFrame, trackIndex, mediaType}])`:
   - `endFrame` is exclusive (100 → 124 = 24 frames). ✗ **`endFrame: n - 1`** → all 51 inserts one frame short.
   - `recordFrame` is absolute (`tl.GetStartFrame() + offset`, 86400 at 01:00:00:00 / 24 fps) and may be fractional on any clip; `startFrame` / `endFrame` round to whole source frames.
   - No `mediaType` = linked picture and sound; `1` = picture, `2` = sound. `trackIndex` needs the track to exist (`AddTrack`).
+  - ✗ **`endFrame` from `GetClipProperty("Frames")` on a WAV** → it reads 0, nothing placed → take the length from the plan (timeline frames) or ffprobe.
   - ✗ **One bad item in the list** (a piece shorter than ~2 frames rounds to zero length) → the whole batch fails (0 of 196 placed) → give every piece ≥ 1 frame; append one by one when hunting the bad item.
 - `InsertGeneratorIntoTimeline("Adjustment Clip")` is an insert edit at the playhead on V1 (it ripples the timeline by 120 frames) → put the playhead past the last clip, insert, then `tl.MoveItems([it], {"trackIndex": k, "startFrame": f})`. The adjustment clip stays 120 frames: `SetRightOffset` returns False, `GetLeftOffset` / `GetRightOffset` None.
 - Reading cuts back (after a human moved one): `GetSourceStartFrame()` / `GetSourceEndFrame()` (end exclusive, same as `endFrame`), `GetStart()` / `GetEnd()` minus `tl.GetStartFrame()` = record frames. Read the track whose source the transcript was made on.
@@ -183,6 +218,7 @@ result = B.snapshot(resolve, project, "Teleprompter demo 9x16", "rough")   # {"s
   - ✗ **Integer getters on sub-frame pieces** disagree (`GetSourceStartFrame()` 696 vs `GetLeftOffset()` 697) → use the fractional forms (`GetLeftOffset(True)`, `GetStart(True)`, `GetEnd(True)`).
   - Items of a multicam clip return multicam frames → subtract the angle's offset inside the multicam.
 - ✗ **Placing new tracks from the cut list after the human trimmed the timeline** → 98 items against 65 real ones → mirror the timeline's current items, never the plan.
+- ✗ **`tl.DeleteClips([...])` on a timeline that is not the current one** → returns False, nothing deleted (single items and batches alike), while the same call works once `project.SetCurrentTimeline(tl)` ran → set it current first (and restore the human's timeline after). An append over a still-occupied range can return items and leave the track unchanged: delete first, read the count, then append.
 
 ### Another format from the approved 9x16
 
@@ -197,6 +233,8 @@ Not yet run end to end: read every step back, and log what fails here.
 
 - ✗ **`SetTrackEnable` on the Deliver page** (where a render leaves Resolve) → returns True, changes nothing → `resolve.OpenPage("edit")` first and after every render. `TimelineItem.SetClipEnabled` works on any page.
 - ✗ **`GetIsTrackEnabled` on a timeline that isn't current** → False for every track; `DeleteTrack` on one → False → `SetCurrentTimeline` first (restore after), or read a DRT export (`Sm2TiTrack` `Flags`: 0 on, 2 off).
+- ✗ **Several `SetCurrentTimeline` switches inside one script** (switch, edit, switch back, next timeline…) → Resolve 21.2 crashed twice in one night → one switch per call, a pause after it, no switch back in the same call; imports in a call of their own. `Timeline.ExportFrame`, `TimelineItem.SetProperty` / `GetProperty` and markers need no switch (mind the Pan/Tilt units above).
+- `AddTrack("video")` lands on top; 21.2 takes no index → a new layer UNDER existing ones (a reframe track right above V1, below the caption layer): add the track, re-lay the items of the upper tracks one track higher (same source range and record frame, copy `ZoomX` / `ZoomY` / `Pan` / `Tilt` / `Opacity` / `CompositeMode`), delete the old items, rename the tracks.
 - ✗ **Appending to a new subtitle track** (`AddTrack("subtitle")`) → returned a 1-item list, added nothing: the track was created disabled → `SetTrackEnable("subtitle", k, True)` before appending.
 - A mono clip on a mono track plays 3 dB lower on the stereo bus (pan law) than a dual-mono stereo clip → `AddTrack("audio", "stereo")` and a 2-channel file for A/B tests.
 - No getter for track mute or solo (neither the API nor the DRT flags carry it) → the human checks the mixer.
@@ -253,13 +291,20 @@ The human picks takes in Resolve (right-click a clip → Take Selector); `resolv
 
 ## Rendering
 
-- Start from a stock preset, then override only what you need: `LoadRenderPreset("YouTube - 2160p")`, `SetRenderSettings({"TargetDir", "CustomName", …})`, `AddRenderJob()`, `StartRendering([job_id], False)`, poll `GetRenderJobStatus(job_id)` until `Complete` (ffprobe reads a duration from a file Resolve is still writing).
+- Start from a preset (a stock one, or a master preset built from one: Bitrate below), then override only what you need: `LoadRenderPreset("YouTube - 2160p")`, `SetRenderSettings({"TargetDir", "CustomName", …})`, `AddRenderJob()`, `StartRendering([job_id], False)`, poll `GetRenderJobStatus(job_id)` until `Complete` (ffprobe reads a duration from a file Resolve is still writing).
   - ✗ **A hand-built job** (`SetCurrentRenderFormatAndCodec("mp4", "H264_NVIDIA")` + settings) after audio-only renders → audio-only file while the job said `IsExportVideo: True`; software H.264 the same → load a stock preset first.
   - ✗ **The first job of a batch, a lone job included** → sometimes no video stream (AAC + data, done in < 1 s) on two different timelines and both H.264 encoders → queue a 1-second throwaway job first (`MarkIn` start, `MarkOut` start + 24) and ffprobe every output for a video stream.
   - ✗ **`StartRendering` on the first call** → sometimes False → retry up to 5 times, 1 s apart.
   - ✗ **One preset, then a job per timeline** → job 1 at the preset size, jobs 2+ at each timeline's resolution → per timeline: `SetCurrentTimeline` → `LoadRenderPreset` → `SetRenderSettings({"FormatWidth", "FormatHeight", …})` → `AddRenderJob`; read `GetRenderJobList()` sizes before starting.
   - A 9x16 timeline: the stock YouTube presets are landscape (1920×1080, 3840×2160) → after the preset set `FormatWidth` / `FormatHeight` to the timeline's size and read the job's size back; a job whose size differs from its timeline is deleted, never started (`render_finals.py` does both; not yet seen on a real vertical render: log the result here).
-- Bitrate: ✗ **`VideoQuality` as an int or `"High"` on H.264 NVIDIA** → False; ✗ **on a stock H.264 preset** a 40 Mbps request returned True and rendered 10.6 Mbps → for a high-bitrate H.264 render ProRes 422 (`LoadRenderPreset("H.264 Master")` + `SetCurrentRenderFormatAndCodec("mov", "ProRes422")`) and encode with ffmpeg. `H.264 Master` alone = `.mov`, ~123 Mbps at UHD. `ReplaceExistingFilesInPlace` → False. `YouTube - 2160p` = mp4, ~11 Mbps, keyframe every 24 frames.
+- Bitrate:
+  - ✗ **`VideoQuality` through `SetRenderSettings`** (an int in kbps, `"Best"`, `"High"`) on H.264, H.265 and AV1 NVIDIA → False, and every render came out at the stock preset's rate (UHD 10 s: 11.1 Mbps H.265 Main10, 11.2 H.264, 7.3 AV1, while 80000 was asked); one earlier call returned True and still rendered 10.6 Mbps.
+  - Why: a preset holds its rate in its XML. `RecordQuality` 4 = an automatic quality level, 0 = "Restrict to" (bitrate); `h264_datarate` = kbps; `encoder_command_param_map` = the NVENC options, hex of a u32 pair count then u32 byte length + UTF-16BE string per key and value: `rc` (`vbr-quality` in the stock H.265 preset, `vbr-bitrate` in the stock H.264 one, `cbr`), `bitrate` (kbps), `preset` (`faster`), `tuning`, `rc-lookahead`, `aq-strength`….
+  - Works: save a copy of the stock preset with the codec set (`SaveAsNewRenderPreset`), `resolve.ExportRenderPreset(name, folder)`, patch `RecordQuality` 0 + `h264_datarate` + `rc` / `bitrate` in the map + a new `DbId`, `DeleteRenderPreset` the copy, `resolve.ImportRenderPreset(file)` (the preset takes the file's name), `LoadRenderPreset`. Measured on UHD 10 s: H.265 `vbr-bitrate` 80000 → 50.9 Mbps (VBR spends less on a talking head), `cbr` 80000 → 84.5 Mbps; H.264 `vbr-bitrate` 20000 → 15.8 Mbps. `scripts/resolve_presets.py` (`ensure`) does it and reads the imported preset back; `render_finals.py` uses it. The ProRes 422 + ffmpeg route is no longer needed for bitrate.
+  - ✗ **`ExportRenderPreset` on a stock preset** → False, no file. ✗ **A path ending in `.xml`** → Resolve makes a FOLDER of that name and writes `<preset name>.xml` inside → pass a folder.
+  - ✗ **`SetCurrentRenderFormatAndCodec("mp4", "AV1YUV420_10_NVIDIA")`** → False, yet the job rendered AV1 → read the codec back from the job or the preset XML (`RecordFormatSubType`: `hvc1_nvenc`, `avc1_nvenc`), never from the return.
+  - ✗ **`SetRenderSettings({"SelectAllFrames": False})`** → False while `MarkIn` / `MarkOut` set right after it work → set each key alone; an `all(...)` over the returns stops at that False and leaves the next keys unset (a job then rendered under the default frame-number name).
+  - `H.264 Master` = `.mov`, ~123 Mbps at UHD. `ReplaceExistingFilesInPlace` → False. `YouTube - 2160p` = mp4, ~11 Mbps, keyframe every 24 frames.
 - Audio only: `LoadRenderPreset("Audio Only")` + `{"SelectAllFrames": False, "MarkIn", "MarkOut", "ExportVideo": False, "ExportAudio": True, "AudioFormat": "wav", "AudioCodec": "lpcm", "AudioSampleRate": 48000, "AudioBitDepth": 24}` → stereo WAV in under a second.
   - ✗ **`GetRenderCodecs("wav")`** → `{}` (WAV is an audio format: `GetAudioRenderFormats()`, `GetAudioRenderCodecs("wav")` = `{"Linear PCM": "lpcm"}`); ✗ **`SetCurrentRenderFormatAndCodec("wav", …)` without the preset** → `StartRendering` False.
   - ✗ **"Audio Only" loaded right after video jobs, without `AudioFormat` / `AudioCodec`** → `.mov` (pcm_s24le) on 2 of 4 jobs → always pass both; check the extension before feeding the file on.
@@ -275,6 +320,7 @@ The human picks takes in Resolve (right-click a clip → Take Selector); `resolv
 
 - `get_thumbnails source=timeline` after every build (a grid over the timeline; the playhead never moves); `get_image` for one frame (`roi_*` crops a region at full detail). Both render the CURRENT timeline only (they take no timeline name). Subtitle tracks render in neither.
 - `Timeline.ExportFrame(frame, {"outputType": "file", "filePath": …, "maxDimension": …})`, `TimelineItem.ExportFrame` and `MediaPoolItem.ExportFrame` rendered frames of timelines that were NOT current (24 frames on 8 timelines, ~0.25 s each) → grab frames of any timeline without touching the human's view. Earlier "current timeline only" failures happened while the renderer was wedged (below): try without switching first.
+- `Timeline.ExportFrame(frame, …)` takes the 0-based offset from the timeline start and returns a dict (`success`, `error`), truthy even on failure. ✗ **An absolute frame (`GetStartFrame() + offset`)** → `frameOffset is out of range for the timeline`, no file → pass the offset, check `r.get("success")`.
 - Every frame render has a 10 s cap.
   - ✗ **Cold heavy frames** (UHD multicam, Fusion, noise reduction) → `Failed to render frame … 10 second timeout` → retry inside one `run_script_unsafe` (within the time budget), or `SetCurrentTimecode` + `project.ExportCurrentFrameAsStill(path)` up to 6 tries; once cached they return in 0.1–3 s.
   - ✗ **A smaller `max_dimension`** (1024 → 640 → 480), as the error suggests → no change.
@@ -292,6 +338,12 @@ The human picks takes in Resolve (right-click a clip → Take Selector); `resolv
 - `item.ExportLUT(resolve.EXPORT_LUT_65PTCUBE, path)` on a V2 adjustment clip of the current timeline → True, and ffmpeg + that LUT matched Resolve's graded still to 1/255 (`project.ExportCurrentFrameAsStill`).
   - ✗ **`ExportLUT` on items of another project** (65- and 33-point, current and non-current timelines, grades inside multicam or compound clips, Edit page) → False every time, no file. The cause is not isolated: log `resolve.GetCurrentPage()` and the item type when it fails, and try from the Color page.
   - ✗ **`GetNodeGraph()` / `describe_grade` on multicam or compound items** → one empty node; the real grade sits inside → decode it from a DRT export.
+  - Multicam grades live INSIDE the multicam: one `pLmVerTable` per angle clip (`Sm2TiVideoClip` in the multicam's own `SeqContainer` xml of any DRT that uses it), shared by every instance of that angle on every timeline; ungraded angles have no `pLmVerTable`. No API call writes there:
+    - ✗ **`src.CopyGrades([tgt])` between multicam items** → True, nothing copied (it copies the empty outer graph).
+    - ✗ **`item.GetNodeGraph().ApplyGradeFromDRX(drx, 0)` on a multicam item** → True, the nodes read back through the API, but they land on that one outer item and render NOTHING (frame identical to before) → `ResetAllGrades()` it. `ApplyGradeFromDRX` also switches Resolve to the Color page → restore the page after it.
+    - ✗ **DRT round trip with the grade patched into the multicam's angle clips** → `ImportTimelineFromFile` relinks to the existing multicam (no duplicate clips) and drops the patched grades.
+    - ✗ **`MediaPoolItem.GetTimeline()` on a multicam** → None (no handle on its inner timeline).
+    - Works: build a `.drx` per camera from the angle's `LmVersion` `<Body>` (a `Gallery::GyStill` with a `pClipFullVer` holding that `LmVersion`, `HasCorrection` true, no thumbnails needed): `ApplyGradeFromDRX` accepts it (nodes, labels, tools intact). The human imports those stills into the Gallery and applies them on the Color page with the multicam opened in a timeline (media pool → Open in Timeline: the angles become plain clips).
   - ✗ **`GalleryStillAlbum.ExportStills(...)` on the Edit page** → False, no files.
   - Fallback when no exact LUT comes out: fit a 33-point LUT from frame pairs (the ungraded source frame and Resolve's graded still of the same frame, several frames across the set) → 0.5–1.6/255 off on 7 looks. It carries colour nodes only (no Midtone Detail, noise reduction, beauty, windows or qualifiers), so say "fitted" wherever it is used.
 
@@ -312,7 +364,7 @@ The human picks takes in Resolve (right-click a clip → Take Selector); `resolv
 - ✗ **Reading every input of every tool** (`GetInputList()` + values across nested macros) → 30 s timeout → list names once, read only the macro's inputs (< 1 s per item).
 - ✗ **`bmd.readfile`, `io.open`, `GetRegList(CT_Tool)` inside `resolve.Fusion().Execute(lua)`** → the chunk aborts silently (`fu.GetData` → None) → validate `.setting` files in Python.
 - Fonts installed per user while Resolve runs render in Text+ without a restart.
-- Untested so far: crop units and Pan/Tilt scale on vertical timelines, transition easing through the API, OGraf / Lottie graphics.
+- Untested so far: transition easing through the API, OGraf / Lottie graphics.
 
 ## Alpha layers
 

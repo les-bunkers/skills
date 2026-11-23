@@ -37,8 +37,10 @@ Modes (one per MCP call; each stays well under 60 s for a 20-min cut):
   read_cuts       the named timeline's A1 items as they are now -> Cut list on source frames (ARGS out = path):
                   captions, graphics and formats follow the edit the human approved, never the planned cut list
 Where things go and what they are called: resolve_bins.py (layout) and references/resolve.md § Organization. The
-build lands in 01 Timelines/WIP/Latest under the video's plain name (ARGS name, default the cut list's "timeline"),
-its SRT in 03 Assets/Subtitles/<name>. A timeline with that name already there -> error, unless ARGS["replace"] = True
+build (and the take picker) lands in 01 Timelines/WIP/Processing under the video's plain name (ARGS name, default the
+cut list's "timeline"): the agent is still on it. Once its checks pass, resolve_bins.release() moves it to
+01 Timelines/Waiting for review for the human. Its SRT goes in 03 Assets/Subtitles/<name>. A timeline with that name
+already there (any bin) -> error, unless ARGS["replace"] = True
 (inspect it first): the existing one is then filed in 01 Timelines/WIP/Archive as "<name> vNN YYYY-MM-DD <state>"
 (nothing is deleted, hand edits stay in that copy) and the new build takes the plain name. ARGS["replace"] = "delete"
 deletes it instead. Current timeline, page and media-pool folder are restored after every mode.
@@ -446,7 +448,7 @@ def _run(resolve, project, args):
                     "replace = True files it in 01 Timelines/WIP/Archive and builds a new one"}
         prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()
         prev_name = prev_tl.GetName() if prev_tl is not None else None
-        tlbin = B.path_bin(mp, B.LATEST)
+        tlbin = B.path_bin(mp, B.PROCESSING)
         staged, custom = None, None
         if fmt and B.fmt_of(project) != fmt:
             staged, custom, err = stage(pname, tlbin, prev_name)
@@ -500,7 +502,7 @@ def _run(resolve, project, args):
                   drop=B.PLACE_WORDS + B.STATES + B.FORMAT_WORDS)
         expected = [len(g["options"]) for g in pp]
         saved = bool(resolve.GetProjectManager().SaveProject())  # a crash while the human picks loses nothing
-        report = {"timeline": pname, "bin": B.LATEST, "archived": archived, "segments": len(pp),
+        report = {"timeline": pname, "bin": B.PROCESSING, "archived": archived, "segments": len(pp),
                   "takes_per_clip": counts, "takes_expected": expected, "ok": counts == expected and not fail,
                   "added": added, "fail": fail[:20], "len": tl.GetEndFrame() - st, "expected_len": sum(g["len_f"] for g in pp),
                   "format": {"want": fmt, "got": B.fmt_of(tl, project), "settings": custom} if fmt else None,
@@ -569,7 +571,7 @@ def _run(resolve, project, args):
                 "edits stay in the archived one); replace = 'delete' deletes it"}
     prev_tl, prev_page = project.GetCurrentTimeline(), resolve.GetCurrentPage()
     prev_name = prev_tl.GetName() if prev_tl is not None else None
-    tlbin = B.path_bin(mp, B.LATEST)
+    tlbin = B.path_bin(mp, B.PROCESSING)
     staged, custom = None, None
     if fmt and B.fmt_of(project) != fmt:  # the project's size makes another format: this timeline gets its own
         staged, custom, err = stage(name, tlbin, prev_name)
@@ -690,10 +692,10 @@ def _run(resolve, project, args):
             custom["set_again_after_build"] = True
         fmt_report = {"want": fmt, "got": got, "ok": got == fmt, "settings": custom}
     item = tl.GetMediaPoolItem()  # the angle switch re-imports the timeline: file and tag the one that stands now
-    filed = B.move(resolve, project, [item], B.LATEST) if item else {"error": "timeline has no media pool item"}
+    filed = B.move(resolve, project, [item], B.PROCESSING) if item else {"error": "timeline has no media pool item"}
     if item:
         B.tag(item, *B.timeline_words(name), "timeline", "latest", state, drop=B.PLACE_WORDS + B.STATES + B.FORMAT_WORDS)
-    report = {"timeline": name, "bin": B.LATEST, "filed": filed, "archived": archived, "state": state, "format": fmt_report,
+    report = {"timeline": name, "bin": B.PROCESSING, "filed": filed, "archived": archived, "state": state, "format": fmt_report,
               "len": tl.GetEndFrame() - st, "expected": pl["total_f"], "V1": len(v1), "A1": len(a1),
               "V2": len(tl.GetItemListInTrack("video", 2) or []) if tl.GetTrackCount("video") >= 2 else 0,
               "V3": len(tl.GetItemListInTrack("video", 3) or []) if tl.GetTrackCount("video") >= 3 else 0,

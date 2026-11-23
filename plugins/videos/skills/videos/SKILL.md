@@ -28,7 +28,7 @@ argument-hint: "[video name or slug]"
 | audio | `/videos:audio` | speech cleanup, speaker split, −14 LUFS master (→ `audio-cleanup` plugin); one master serves every format |
 | grade | `/videos:grade` | one look per set, LUT export |
 | formats | `/videos:formats` | graphics, captions, hook, end card as alpha layers on the 9x16 (other kinds: their formats) |
-| master | `/videos:master` | the human approves the full 9x16: frozen in Final, rendered, cuts read back, file checked |
+| master | `/videos:master` | the human approves the full 9x16: frozen in Published, rendered, cuts read back, file checked |
 | wide | `/videos:wide` | the 16:9 made from the approved 9x16: same cut, sound and grade, wide framing, 16:9 layers, render |
 | clips | `/videos:clips` | shorts cut from the approved 9x16 in the NLE; podcasts without a vertical edit → `vertical-clips` plugin |
 | qc | `/videos:qc` | one gate before anything ships |
@@ -39,7 +39,7 @@ argument-hint: "[video name or slug]"
 A talking-head video is cut once, as the long vertical, then turned into the other deliverables:
 
 1. ingest → transcribe → rough → tighten → audio → grade → formats, all on `<Video> 9x16` (1080×1920). Each stage keeps its own review gate.
-2. master: the human watches the whole 9x16 with its layers and approves it. It is frozen in `01 Timelines/Final` and rendered. Nothing after this point changes the approved cut.
+2. master: the human watches the whole 9x16 with its layers and approves it. It is frozen in `01 Timelines/Published` and rendered. Nothing after this point changes the approved cut.
 3. Then side by side, both made from the approved 9x16: wide builds `<Video> 16x9`, clips builds the shorts `<Video> 9x16 S01 <topic>` (ranges the human picks, Green markers from the rough as candidates). Each has its own review, render and video CI.
 4. qc, then publish: the long 9x16, the 16x9 and the shorts.
 
@@ -72,7 +72,7 @@ Profiles, checks, thresholds, where each stage runs it: [ci](${CLAUDE_PLUGIN_ROO
 - Grade per set: a look never crosses shoots or sets (lighting differs).
 - One render chain at a time; check free RAM first (< 4 GB → wait; ≥ 10 GB for heavy stages when browser renders, speech models or local generation share the machine). Background jobs longer than ~10 min get a periodic check that they are still moving, and an expected finish time at launch.
 - Other agents, sessions and the human share the project: check who is on a video before writing, never edit a script a running job uses, hold the render lock for every GPU-heavy job, brief sub-agents with the CI rule, and tell the human where everything is: [working](${CLAUDE_PLUGIN_ROOT}/references/working.md). ffmpeg traps: [ffmpeg](${CLAUDE_PLUGIN_ROOT}/references/ffmpeg.md); install: [setup](${CLAUDE_PLUGIN_ROOT}/references/setup.md).
-- NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's. A timeline's name carries its format (`<Video> 9x16`, `<Video> 16x9`, `<Video> 9x16 S01 <topic>`); the 16x9 and the shorts come from the approved 9x16, never cut apart from it.
+- NLE timelines: before rebuilding one, compare it with the last build (hand edits → ask); build new timelines beside old ones, never delete the human's. A timeline's name carries its format (`<Video> 9x16`, `<Video> 16x9`, `<Video> 9x16 S01 <topic>`); the 16x9 and the shorts come from the approved 9x16, never cut apart from it. In Resolve the bin says who has a timeline: `WIP/Processing` while an agent changes it (`B.claim`), `Waiting for review` when the agent is done and the stage's status turns `review` (`B.release`), `WIP/Latest` otherwise, approved copies in `Published` (`/videos:resolve`).
 - DaVinci Resolve: load `/videos:resolve` before the first MCP call of a session. A timed-out script keeps running, one Resolve is shared with the human and other sessions, and many calls fail silently; its log ([resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md)) lists every failed attempt with what to do instead.
 - Camera changes on a multicam edit = the multicam clip's active angle, never another camera's clip on a track above it (Resolve: `scripts/resolve_multicam_angles.py`).
 - Graphics are layers; compositing happens in the NLE. Anything drawn over footage (motion graphics, cards, labels, highlight boxes, hook and end cards, designed captions) renders alone with alpha (HyperFrames `--format mov` = ProRes 4444 + alpha, transparent root), on a canvas the size of the target timeline with the element at its default place (Resolve scales a smaller clip up to fit the frame), and goes on its own named track above the picture, where the human can move, scale, trim or drop it without a re-render. Changes to the footage itself (zooms, punch-ins, reframes, blurs and redactions, PiP of another camera, transitions, grade) are made on the clips in the NLE, never baked into a rendered copy of the cut. Bake graphics into one rendered video only for motion-only pieces with no footage under them, or a hands-off batch the human asked for. [layers](${CLAUDE_PLUGIN_ROOT}/references/layers.md)
