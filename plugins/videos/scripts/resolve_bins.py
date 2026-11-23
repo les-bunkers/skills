@@ -65,8 +65,9 @@ NAME = re.compile(r"^(?P<video>.+?) (?P<fmt>9x16|16x9|4x3)(?: S(?P<short>\d{2,3}
 
 
 def clean(name):
-    """A bin or timeline name without path separators (a "/" in a bin name breaks every path lookup)."""
-    return re.sub(r"\s*[\\/:]+\s*", " - ", str(name)).strip()
+    """A bin or timeline name Resolve takes: no path separators (a "/" in a bin name breaks every path lookup) and none
+    of ? * " < > | (AddSubFolder refuses them, like Windows file names): "Ready? Go" -> "Ready - Go"."""
+    return re.sub(r'\s*[\\/:?*"<>|]+\s*', " - ", str(name)).strip(" -")
 
 
 def tl_name(video, fmt, short=None, label=None, variant=None):
