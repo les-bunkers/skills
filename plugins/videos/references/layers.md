@@ -81,6 +81,62 @@ Checks: every shot inside a section is the frontal camera with the face near the
 
 Traps: a panel flush to the frame edge fails the title-safe lint → lint panel pages with the safe margin set to the panel padding, on the settled layout. A zoom on the card column multiplies slide distances (a 42 px entry at zoom 1.3 = 55 px, the whole padding) → cap slides at 40 px on screen. Prefix the panel's CSS classes and ids: card builders already use the short names. A subtitle track centred on the full frame runs under the panel → switch it off over sections, or give burned-in captions a position per section.
 
+## Layout sections: framed panels that show the thing
+
+The layout pass and the show-don't-tell pass are part of every pass over a clip (`/videos` § House rules, `/videos:formats` § Layout pass). A talking head with text cards over it tells; framed panels of the real thing show. For a span of the cut, the full-frame camera gives way to one or more rounded panels of real footage on a moving wallpaper; between spans the plain camera cut comes back.
+
+### Kinds
+
+| Kind | Panels | Use when |
+|---|---|---|
+| `screen` | the screen recording cropped to the app window, in a rounded window with a margin on the wallpaper + the speaker's face in a circle bubble in a lower corner | the speaker works in an app or a page: the viewer must read the screen |
+| `side2` | two equal panels | one action and its effect (a click ↔ the camera that moves), or two angles of the same moment; never two unrelated pictures |
+| `tri3` | one big portrait panel + two small landscape panels stacked on the other side (mirrorable) | the speaker (tall) beside the thing and its detail (a device + its control, a product + a close-up) |
+| `three16` | three 16:9 cameras, one big + two small stacked | a multi-camera result (all cameras reframed at once, before / after on each) |
+| `vslice` | the landscape source with the 9:16 slice outlined + a portrait panel showing that slice | explaining a vertical crop, a zoom headroom, a resolution |
+| `single` | one framed panel | one B-roll or one camera that needs the frame (in-panel hard cuts or one eased zoom) |
+
+On a 9:16 canvas the same kinds stack top to bottom (`side2` → two panels one above the other); the caption band stays clear in every kind.
+
+Shared by every kind:
+- One corner radius, one gutter, one outer margin, one drop shadow, one wallpaper for the whole video (the project's style file holds the numbers; first use → write them there once approved).
+- Panels show real footage: multicam angles (the camera is the multicam clip's active angle, the same rule as camera changes) or B-roll and screen-recording files, framed with the NLE's crop / zoom / pan. Nothing in a panel is a rendered copy of the cut.
+- Layout changes are hard cuts on a word boundary, ideally on a cut of the camera track; no morphs, no fades between layouts. Motion lives inside a panel (one eased zoom, in-panel cuts).
+- No panel overlaps another panel or the bubble: the NLE has no circle matte over another panel, so each panel and the bubble keep their own area.
+- Overlays drawn over the panels (a highlight box on the control the speaker names, a thirds grid, a lead-room arrow, a slice outline, a click ripple) are timed to the words that name them.
+
+### Show, don't tell
+
+For each sentence of the cut, ask what it names that a viewer could see: a control, a camera, a product, a result, a before / after. Look in every source of the take (all camera ISOs, not only the active angle; the screen recording; B-roll; real product photos; the project's assets). Show it in a layout span or as a real visual. A drawn diagram explains a concept nothing films. A text card stays only where nothing can be shown (a price, a quote, a list of reasons). Cards that only restated what a span now shows are disabled in the NLE (not deleted) and listed in the record's note.
+
+### The frame layer: wallpaper with holes
+
+One alpha layer per layout span, on a track above the panel tracks:
+- Canvas = the timeline's size, rendered ProRes 4444 with alpha like any layer (§ Render a layer); in Resolve set Alpha mode = Straight.
+- Wallpaper = an opaque full-frame element (gradient + blurred bands, a slow linear drift over the span) masked with `mask-image: url("data:image/svg+xml,…")`: an SVG with one full-frame rect and one rounded rect (or circle) per panel in a single path, `fill-rule="evenodd"`, so each panel area is a transparent hole.
+- Shadows: one empty `div` per panel at the panel rect with the same radius, `background: transparent`, and an outer `box-shadow`. Browsers paint an outer box-shadow only outside the border box, so the hole stays clear and the shadow falls on the wallpaper. Put these divs after the masked wallpaper (same for the bubble: `border-radius: 50%`, a thin light ring + a soft shadow).
+- Overlays in the same composition above the holes, timed to words. One composition per span; carry the drift phase over so the wallpaper does not jump at a cut between two spans.
+
+### Placing the panels (NLE)
+
+One track per panel slot under the frame layer, named for the slot; the camera track (V1) stays as it was, so turning the layout tracks off gives the old edit back. Per panel, from the source rect `(sx, sy, sw, sh)` (source px, same aspect as the panel) to the panel rect `(px, py, pw, ph)` (timeline px) on a `W × H` timeline from an `SW × SH` source:
+
+```
+z    = pw / sw                                    screen px per source px  → Zoom = z / b
+Pan  = px + pw/2 − W/2 − z·(sx + sw/2 − SW/2)     timeline px, + = right
+Tilt = −(py + ph/2 − H/2 − z·(sy + sh/2 − SH/2))  timeline px, + = up
+Crop = per edge, the source px outside (sx, sy, sw, sh) minus bleed / z, × b  (CropLeft = b·(sx − bleed/z), …)
+```
+
+`b` = the timeline's input scale (1 when source and timeline sizes match). Convert px to the Inspector's Pan / Tilt units with [resolve](resolve.md) § Timelines (Inspector transform units; 1 px per unit when the sizes match). Bleed = 2 px past each hole edge, so the anti-aliased rounded edge sits on picture. Crop works the same on a multicam item as on a file clip when the aspects match. Check on exported frames: every panel edge inside its hole, no picture showing at a rounded corner outside the hole, no face cut by a panel edge, captions clear.
+
+### Order of work
+
+1. Plan spans on the cut (`layout.json`: span frames, kind, panels with source and source rect, overlays with anchor words, the cards each span replaces).
+2. Preview stills: real frames placed in the panel rects + the frame layer, 1–2 per span. The human sees them before the build.
+3. Render the frame layers, place panels and layers on the working timeline (claimed), disable the replaced cards, one marker per span.
+4. Composite stills at the start, middle and end of each span from the NLE, then video CI on the review render.
+
 ## After compositing
 
 The render comes from the NLE, each format from its own timeline with its own layers tracks enabled: the approved long 9x16 at `/videos:master`, the 16x9 at `/videos:wide`, each short at `/videos:clips`. `layers.json` holds the cues (record frames, anchor words) for every format; the renders sit in `<media>/layers/<fmt>/renders/`. Loudness and video CI run on those NLE renders, as for any final ([ci](ci.md)).
