@@ -128,14 +128,26 @@ Tilt = −(py + ph/2 − H/2 − z·(sy + sh/2 − SH/2))  timeline px, + = up
 Crop = per edge, the source px outside (sx, sy, sw, sh) minus bleed / z, × b  (CropLeft = b·(sx − bleed/z), …)
 ```
 
-`b` = the timeline's input scale (1 when source and timeline sizes match). Convert px to the Inspector's Pan / Tilt units with [resolve](resolve.md) § Timelines (Inspector transform units; 1 px per unit when the sizes match). Bleed = 2 px past each hole edge, so the anti-aliased rounded edge sits on picture. Crop works the same on a multicam item as on a file clip when the aspects match. Check on exported frames: every panel edge inside its hole, no picture showing at a rounded corner outside the hole, no face cut by a panel edge, captions clear.
+`b` = the timeline's input scale (1 when source and timeline sizes match). Convert px to the Inspector's Pan / Tilt units with [resolve](resolve.md) § Timelines (Inspector transform units; 1 px per unit when the sizes match). Bleed = 2 px past each hole edge, so the anti-aliased rounded edge sits on picture. Crop works the same on a multicam item as on a file clip when the aspects match. Each panel's camera item is cropped to its own panel with cropping switched on ([resolve](resolve.md) § Tracks and clips: `CroppingEnabled`); the frame layer and the item below never serve as the mask, because the upper camera shows through the lower panel as soon as the item below is missing, black or off (the human's verdict on such a frame: a face cut by a caption band = a big no). Prove it per stacked span: hide the lower item (`Opacity` 0) and export the frame → the lower panel must render empty. Check on exported frames: every panel edge inside its hole, no picture showing at a rounded corner outside the hole, no face cut by a panel edge, captions clear.
 
 ### Order of work
 
 1. Plan spans on the cut (`layout.json`: span frames, kind, panels with source and source rect, overlays with anchor words, the cards each span replaces).
 2. Preview stills: real frames placed in the panel rects + the frame layer, 1–2 per span. The human sees them before the build.
 3. Render the frame layers, place panels and layers on the working timeline (claimed), disable the replaced cards, one marker per span.
-4. Composite stills at the start, middle and end of each span from the NLE, then video CI on the review render.
+4. Composite stills from the NLE at every camera-track item's start, start + 1, middle and end − 1 and at every span edge, as contact sheets with the frame number on each tile (`Timeline.ExportFrame` grabs any timeline without switching the human's view; 90 frames at 300 px ≈ 13 s): one camera per panel, captions clear. Span start / middle / end alone misses an item that straddles a layout change or lost its crop. Caption coverage: the captions layer's alpha every 4th frame; empty runs only on pauses in speech. Then video CI on the review render.
+
+## The human re-cuts a layered timeline
+
+Layers are rendered for one cut. When the human re-cuts the working timeline (inserts, trims, a source span played twice), everything keyed to record frames goes stale; the plan is keyed on source time, so it rebuilds from the new cut.
+
+- ✗ **Slicing the old layer renders to follow the new cut** (the human did it by hand, then disabled the slices that no longer fitted) → no captions and no frame over the inserted shots → dump the new cut, make one plan window per camera-track item (source range and angle from the picture item, sound range from the audio item so J/L cuts stay), render the layers again at the timeline's length and swap them whole on their tracks.
+- Pair picture and sound items by overlap, never by index: a picture-only cut inside one audio item adds a picture item.
+- Span edges from the old plan miss the new cut points (seen 3 frames to 1.3 s off) → a panel track runs past its layout change (two cameras in one panel) or a few frames of another layout flash before a screen → snap each span edge to the nearest cut of the camera tracks before rendering.
+- A layout section that falls inside one long shot of the new cut (a screen, then stacked panels, over a single camera item) → one item cannot fill several panels → rebuild the camera tracks of that span only, between the human's own cut points: delete their items inside it, place one item per panel from the plan, cropping on. Where they chose an angle and the plan chose another, keep theirs.
+- Cards and other cues timed in record frames → re-time them from the new cut's words, taken from the new plan (mapping source words onto the timeline places a span played twice only once).
+- A reframe the human set by hand (a zoom on one shot) stays; the plan's automatic push-in on that shot is dropped.
+- Snapshot the human's new cut before writing anything ([resolve](resolve.md) § One Resolve, many callers).
 
 ## After compositing
 

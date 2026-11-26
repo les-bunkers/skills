@@ -1,6 +1,6 @@
 {
   "name": "videos",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Video pipeline for any project: a board of every video in progress, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, formats, master, wide, clips, qc, publish) driven by a plain-text record per video. Talking-head videos are cut once as the long 9:16, then the 16:9 and the shorts are made from the approved cut.",
   "author": {
     "name": "Les Bunkers",
