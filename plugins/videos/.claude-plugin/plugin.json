@@ -1,7 +1,7 @@
 {
   "name": "videos",
-  "version": "0.3.6",
-  "description": "Video pipeline for any project: a board of every video in progress, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, formats, master, wide, clips, qc, publish) driven by a plain-text record per video. Talking-head videos are cut once as the long 9:16, then the 16:9 and the shorts are made from the approved cut.",
+  "version": "0.4.0",
+  "description": "Video pipeline for any project: a board of every video in progress, then one skill per stage (new, ingest, transcribe, rough, tighten, audio, grade, formats, master, wide, clips, qc, publish) driven by a plain-text record per video. Talking-head videos are cut once: a multicamera shoot is then laid out in HyperFrames from one all-angles master (16:9 first, the 9:16 from the same layout spans); a single-camera edit is finished as the long 9:16 in the NLE, and the 16:9 and the shorts are made from it.",
   "author": {
     "name": "Les Bunkers",
     "url": "https://github.com/les-bunkers"
@@ -15,6 +15,7 @@
     "davinci-resolve",
     "pipeline",
     "talking-head",
-    "transcription"
+    "transcription",
+    "hyperframes"
   ]
 }

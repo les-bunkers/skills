@@ -1,6 +1,6 @@
 ---
 name: wide
-description: Wide stage of a talking-head video — make the 16:9 version from the approved long 9:16 in DaVinci Resolve: same cut, sound, camera angles and grade, framing redone for the wide frame, 9:16 stacked layouts turned into their side-by-side counterparts, 16:9 layers on the same cues, then render, video CI, review and approval. Runs side by side with the clips stage once the 9:16 is approved. Use when building, rebuilding or reviewing the 16:9 / landscape / YouTube version of a video that was cut vertical first, carrying a 9:16 change over to the 16:9, or when running /videos:wide.
+description: Wide stage of a talking-head video on the NLE route (the comp route skips it: its 16:9 is the comp itself) — make the 16:9 version from the approved long 9:16 in DaVinci Resolve: same cut, sound, camera angles and grade, framing redone for the wide frame, 9:16 stacked layouts turned into their side-by-side counterparts, 16:9 layers on the same cues, then render, video CI, review and approval. Runs side by side with the clips stage once the 9:16 is approved. Use when building, rebuilding or reviewing the 16:9 / landscape / YouTube version of a video that was cut vertical first, carrying a 9:16 change over to the 16:9, or when running /videos:wide.
 argument-hint: "[video name]"
 ---
 
@@ -8,6 +8,7 @@ argument-hint: "[video name]"
 
 ## Before
 
+- Comp route (`/videos` § Order): nothing to do, the 16:9 is the comp itself → `videos.py set <slug> wide "skip comp route"`.
 - Gate: master `done` = the human approved the whole `<Video> 9x16` and a copy sits in `01 Timelines/Published` (`<Video> 9x16 vNN <date> approved`; older projects: `Final`). Nothing here changes the approved 9x16.
 - Read the record's `style:` files for the wide framing (where the face sits, punch-ins) and the 16:9 layouts the project uses.
 - clips may run at the same time on the same approved 9x16: one Resolve writer at a time (`/videos:resolve` § Sharing Resolve).

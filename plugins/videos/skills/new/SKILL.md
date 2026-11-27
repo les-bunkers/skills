@@ -15,10 +15,11 @@ argument-hint: "[title or slug]"
    - talent (who is on camera);
    - sources: paths of rushes, multicam takes, podcast episodes, existing NLE timelines;
    - style files (`style:`): the project's edit style, caption look, brand doc. None yet → note it; the first cutting stage asks;
-   - deliverables: formats (9:16 / 4:3 / 16:9), length, platforms, date.
+   - deliverables: formats (9:16 / 4:3 / 16:9), length, platforms, date;
+   - talking-head route: `comp` (several cameras or a screen feed: the cut in the NLE, the formats laid out in HyperFrames from one all-angles master) or `nle` (one camera, or the human finishes in the NLE). `/videos` § Order.
 3. Slug: lowercase letters, digits, hyphens, campaign prefix when there is one. Check `videos.py board --all` for a duplicate first.
 4. `videos.py new <slug> --title "…" --kind <kind> [--ws W] [--campaign … --content "…" --talent … --style "…" --code "…" --media "…" --resolve "…"]` → record + `cut/` + `checks/`. Media default = `<media_root>/<workspace>/videos/<slug>`.
-5. In `video.md`: `## Decisions` = deliverables, formats, dates, what the human asked for, open questions. `## Notes` = the sources with durations (`ffprobe -v error -show_entries format=duration -of csv=p=0 <file>`).
+5. In `video.md`: `## Decisions` = deliverables, formats, route, dates, what the human asked for, open questions. `## Notes` = the sources with durations (`ffprobe -v error -show_entries format=duration -of csv=p=0 <file>`).
 6. `videos.py set <slug> brief "done <date>" --next "/videos:<first stage>"`, then show the board line.
 
 ## Notes

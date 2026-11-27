@@ -6,7 +6,7 @@ argument-hint: "[video or batch name]"
 
 `videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. `S` = `${CLAUDE_PLUGIN_ROOT}/scripts`.
 
-Which route: the record has an approved `<Video> 9x16` (talking-head, master `done`) → route A. A podcast or long video that was never cut vertical (record kind `clip-batch`) → route B.
+Which route: the record has an approved `<Video> 9x16` (talking-head, master `done`) → route A. Comp route (the approved 9:16 comp, [comp](${CLAUDE_PLUGIN_ROOT}/references/comp.md)): candidates as in route A step 2, ranges on span edges; each short = the 9:16 comp's range with its own hook and end card (a copy of the 9:16 project trimmed to the range, or the range cut from the 9:16 render on hard cuts). Not scripted yet: read every render back and log what works. A podcast or long video that was never cut vertical (record kind `clip-batch`) → route B.
 
 ## Route A: shorts from the approved long 9x16 (talking-head)
 

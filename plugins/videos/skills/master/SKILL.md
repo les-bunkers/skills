@@ -1,12 +1,16 @@
 ---
 name: master
-description: Master stage of a video — the human's approval of the long 9:16 (frozen in Published), then render the approved DaVinci Resolve timeline to a master file with a stock preset and only the mastered audio track playing, read the final cuts back out of Resolve so captions and graphics follow the edit, and check the delivered file (frame count, loudness, true peak, and that the sound is the right track in sync). Use when an approved timeline must be rendered, a master must be re-rendered after a cut moved, cuts must be read back from Resolve, or when running /videos:master.
+description: Master stage of a video — on the comp route, the HyperFrames comp renders the human approved (16:9 and 9:16) checked and filed; on the NLE route, the human's approval of the long 9:16 (frozen in Published), then render the approved DaVinci Resolve timeline to a master file with a stock preset and only the mastered audio track playing, read the final cuts back out of Resolve so captions and graphics follow the edit, and check the delivered file (frame count, loudness, true peak, and that the sound is the right track in sync). Use when an approved timeline must be rendered, a master must be re-rendered after a cut moved, cuts must be read back from Resolve, or when running /videos:master.
 argument-hint: "[video name]"
 ---
 
 `videos.py` = `uv run "${CLAUDE_PLUGIN_ROOT}/scripts/videos.py"`. `S` = `${CLAUDE_PLUGIN_ROOT}/scripts`. Work from the record folder (`videos.py show <video>` → `record:`). Resolve rules and failure log: `/videos:resolve` ([resolve](${CLAUDE_PLUGIN_ROOT}/references/resolve.md) § Rendering); engine notes: [engine](${CLAUDE_PLUGIN_ROOT}/references/engine.md) § Resolve.
 
-## Do
+## Comp route
+
+The finals are the comp renders the human approved at formats (16:9 and 9:16). Per file: frame count = the plan's `end_f`, `comp.py gaps <file>` clean, loudness checked (`uv run "$S/loudness.py" fix <in> <out>` when it is off: −14 LUFS ± 0.5, true peak ≤ −1 dBTP), video CI `--stage master`. File each one: `B.file_export` into `04 Exports/<Video>` when the project lives in Resolve, else next to the record's other finals. Then `videos.py set <slug> master "done <date> 16x9 + 9x16 <paths> <LUFS>/<dBTP>"`, `videos.py set <slug> wide "skip comp route"`, and `/videos:clips` or `/videos:qc`. The steps below are the NLE route.
+
+## Do (NLE route)
 
 1. Gate: formats `done` on a talking-head video (the whole `<Video> 9x16` with its layers; other kinds: tighten or rough `done`) and audio `done` (a mastered track sits on it, `/videos:audio`). The record's `resolve:` names the timeline. The human watches the whole vertical and approves it: this approval is what the 16x9 (`/videos:wide`) and the shorts (`/videos:clips`) are made from. Confirm the render with the human (it occupies the GPU and Resolve for minutes). Freeze what was approved: a copy named `<Video> 9x16 vNN <date> approved` in `01 Timelines/Published` (`B.snapshot(resolve, project, "<Video> 9x16", "approved", to=B.PUBLISHED)`, `/videos:resolve`), and the working timeline back to `WIP/Latest` (`B.release(…, review=False)`); the render still runs on the working timeline.
 2. Cuts as they are now, never as planned (the human may have moved some): `python "$S/resolve_build.py" --project cut/edit.json --mode read_cuts --name "<timeline>" --out cut/final.cuts.json --snippet` → run with the Resolve MCP tool `run_script_unsafe`. `unknown` must be empty. In-the-voice joins come back on whole frames.

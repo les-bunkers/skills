@@ -36,6 +36,8 @@ checks/joins.json, checks/master.json                                     join_c
 | `join_check.py` | level at every join (pass: none > 35 dB over floor) | light |
 | `resolve_build.py` | Cut list → Resolve: import, multicam, build, take picker + read picks, review markers, inspect, read cuts; `--dry-run` plan | runs inside Resolve |
 | `render_finals.py` | queue + start renders from approved timelines (stock preset) | runs inside Resolve |
+| `comp_faces.py` | comp route: face position, size and yaw per camera cell of the all-angles master (YuNet) | CPU, minutes |
+| `comp.py` | comp route: spans → framing plan, panel tracks, sound, HyperFrames `index.html` (16:9 / 9:16), `verify`, `gaps`; [comp](comp.md) | ffmpeg, minutes |
 | `finals_check.py` | master file: frames, loudness, content vs the cut list at lag | light |
 | `sync_check.py` | lag between two renders, several windows | light |
 

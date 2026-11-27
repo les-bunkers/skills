@@ -37,13 +37,13 @@ Each plugin's `references/setup.md` lists what to install (ffmpeg, uv, Python en
 ## How a video moves
 
 ```
-                                       the long 9:16 ("<Video> 9x16")                          made from the approved 9:16
+                                  the cut, approved by the human           comp: HyperFrames 16:9, then 9:16   NLE: from the approved 9:16
 /videos:new ──► ingest ──► transcribe ──► rough ──► tighten ──► audio ──► grade ──► formats ──► master ──┬──► wide (16:9) ──┬──► qc ──► publish
                                                       ▲           ▲                              approved └──► clips (shorts) ┘
                                                  agent-ears  audio-cleanup                      podcast clip batches: vertical-clips
 ```
 
-A talking-head video is cut once, as the long vertical: rough, tighten, audio, grade and its graphics all land on one 9:16 timeline, and the human approves that whole cut at master. Then two stages run side by side from the approved cut: wide makes the 16:9 (same cut, sound and grade, framing and graphics redone for the wide frame) and clips makes the shorts (ranges of the approved vertical with their own hook). Timelines carry their format in their name (`Studio tour 9x16`, `Studio tour 16x9`, `Studio tour 9x16 S01 price`).
+A talking-head video is cut once, then turned into its deliverables by one of two routes. **Comp route** (several cameras or a screen feed): rough and tighten decide the cut in the NLE, the human fine-tunes and approves it, then formats renders an all-angles master (every camera of the cut in one 8K frame) and lays the video out in HyperFrames from it: a camera per span, framed-panel layouts, screen crops and zooms, the product's own reel, generated app UIs, captions and sound. The 16:9 comes first, the 9:16 is built from the same spans, and the human reviews both in HyperFrames Studio ([comp](plugins/videos/references/comp.md)). **NLE route** (one camera, or finishing in the NLE): rough, tighten, audio, grade and the graphics all land on one 9:16 timeline, the human approves that whole cut at master, then wide makes the 16:9 (same cut, sound and grade, framing and graphics redone for the wide frame) and clips makes the shorts (ranges of the approved vertical with their own hook). Timelines carry their format in their name (`Studio tour 9x16`, `Studio tour 16x9`, `Studio tour 9x16 S01 price`).
 
 Every video gets one record, `.agents/videos/<slug>/video.md`: one line per stage (`todo`, `doing`, `review`, `done`, `skip`, `blocked`), the decisions the human made, notes and a dated log. Stages that wait on a person stop at `review` and say what to look at. Finished files land in `artifacts/videos/<slug>/` with a `release.md` holding the caption, platforms, post date, loudness and QC result. Heavy media stays on your media drive (`media_root`).
 

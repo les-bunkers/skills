@@ -83,7 +83,7 @@ Traps: a panel flush to the frame edge fails the title-safe lint → lint panel 
 
 ## Layout sections: framed panels that show the thing
 
-The layout pass and the show-don't-tell pass are part of every pass over a clip (`/videos` § House rules, `/videos:formats` § Layout pass). A talking head with text cards over it tells; framed panels of the real thing show. For a span of the cut, the full-frame camera gives way to one or more rounded panels of real footage on a moving wallpaper; between spans the plain camera cut comes back.
+On the comp route these kinds are built in HyperFrames from one all-angles master instead of in the NLE: [comp](comp.md). The layout pass and the show-don't-tell pass are part of every pass over a clip (`/videos` § House rules, `/videos:formats` § Layout pass). A talking head with text cards over it tells; framed panels of the real thing show. For a span of the cut, the full-frame camera gives way to one or more rounded panels of real footage on a moving wallpaper; between spans the plain camera cut comes back.
 
 ### Kinds
 
