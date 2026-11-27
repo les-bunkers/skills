@@ -4,7 +4,7 @@ description: 9:16 clip factory for podcasts and long talking-head videos. Sticky
 argument-hint: "[clip ids]"
 ---
 
-Which tool: a talking-head video already cut as a long 9:16 in an NLE gets its shorts from that approved timeline (videos plugin, `/videos:clips` route A: each short keeps the edit's cut, framing, grade, sound and graphics). This factory is for podcasts and long videos that were never cut vertical.
+Which tool: a talking-head video already cut as a long 9:16 (in an NLE, or as a 9:16 layout comp in HyperFrames) gets its shorts from that approved vertical (videos plugin, `/videos:clips`: each short keeps the edit's cut, framing, grade, sound and graphics). This factory is for podcasts and long videos that were never cut vertical.
 
 One batch = one folder holding `clips.json` (episodes + clips). Every script reads it from the current folder (`-c path` or `$VC_CONFIG` elsewhere) and writes one folder per clip under `out` (default `clips/`). Steps skip work whose output is newer than its inputs, so rerunning a stage is always safe.
 
